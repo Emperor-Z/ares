@@ -9,6 +9,7 @@ Serena concurrently.
 from __future__ import annotations
 
 import json
+import os
 import logging
 import subprocess
 import threading
@@ -133,5 +134,7 @@ def get_serena_client() -> SerenaClient:
     if _client is None:
         with _client_lock:
             if _client is None:
-                _client = SerenaClient()
+                # Without a project Serena starts but every symbol tool fails.
+                project = os.environ.get("ARES_SERENA_PROJECT") or os.getcwd()
+                _client = SerenaClient(project=project)
     return _client

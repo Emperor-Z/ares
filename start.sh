@@ -3,10 +3,14 @@
 set -euo pipefail
 
 ARES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CORE_DIR="$(dirname "$ARES_DIR")/ares-core"
-PYTHON="$CORE_DIR/.venv/bin/python"
+PYTHON="${ARES_PYTHON:-$ARES_DIR/.venv/bin/python}"
 
-export PYTHONPATH="$CORE_DIR/src:$CORE_DIR/.venv/lib/python3.13/site-packages:$ARES_DIR"
+if ! "$PYTHON" -c "import ares, openjarvis" &>/dev/null; then
+    echo "[err] Ares is not installed for $PYTHON"
+    echo "      Run: uv venv && uv pip install -e ."
+    echo "      (or set ARES_PYTHON to an interpreter that has it installed)"
+    exit 1
+fi
 
 # ── Load secrets from .env (never hardcode keys in this file) ────────────────
 if [ -f "$ARES_DIR/.env" ]; then
@@ -116,4 +120,4 @@ echo -e "${G}All services ready.${N}"
 echo -e "  Langfuse UI  : http://localhost:3000"
 echo -e "  A2A agents   : :8100 (orch) :8101 (coder) :8102 (thinker) :8103 (runner) :8104 (serena)"
 echo
-exec "$PYTHON" "$ARES_DIR/main.py"
+exec "$PYTHON" -m ares

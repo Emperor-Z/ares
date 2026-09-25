@@ -11,7 +11,7 @@ build/
 venv/
 
 # Runtime state
-~/.ares/
+.pytest_cache/
 *.db
 *.sqlite
 

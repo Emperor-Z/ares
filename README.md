@@ -1,5 +1,7 @@
 # Ares
 
+[![tests](https://github.com/Emperor-Z/ares/actions/workflows/tests.yml/badge.svg)](https://github.com/Emperor-Z/ares/actions/workflows/tests.yml)
+
 Local multi-agent AI system for running specialised assistants on a personal machine. Ares combines local Ollama models, role-specific agents, A2A HTTP services, memory, Serena code-navigation integration, and Langfuse observability behind a terminal REPL.
 
 Ares is also the orchestration backbone underneath the [VeriSim](https://github.com/Emperor-Z/verisim) dissertation system, handling local agent routing and memory for that project.
@@ -8,7 +10,7 @@ Ares is also the orchestration backbone underneath the [VeriSim](https://github.
 
 ![Ares REPL demo](demo/ares-demo.gif)
 
-A real local session: `./start.sh` boots Ollama, Langfuse, and all five A2A agent servers, then `/coder` and `/thinker` run against local models (qwen2.5-coder and deepseek-r1) with real responses. The `/serena` command currently has an open bug where the Serena MCP client isn't receiving the project path correctly - not shown here rather than faked.
+A real local session: `./start.sh` boots Ollama, Langfuse, and all five A2A agent servers, then `/coder` and `/thinker` run against local models (qwen2.5-coder and deepseek-r1) with real responses.
 
 ## What It Does
 
@@ -52,45 +54,41 @@ AresSystem
 
 ## Requirements
 
-- Python 3.13 environment used by the paired `ares-core` checkout
-- Ollama with the configured local models pulled
-- Docker and Docker Compose for the Langfuse stack
-- Local `ares-core` directory next to this repository
+- Python 3.12+
+- [Ollama](https://ollama.com) with the models in `ares/config.py` pulled (`start.sh` tells you which are missing)
+- Docker, for the optional Langfuse tracing stack
+- [Serena](https://github.com/oraios/serena) on your `PATH`, for `/serena`
 
-The current scripts expect this layout:
-
-```text
-parent-directory/
-  aries/
-  ares-core/
-```
-
-## Configuration
-
-Set Langfuse keys in your shell or a local environment file before running the startup script:
+## Install
 
 ```bash
-export LANGFUSE_PUBLIC_KEY="pk-lf-..."
-export LANGFUSE_SECRET_KEY="sk-lf-..."
+git clone https://github.com/Emperor-Z/ares.git
+cd ares
+uv venv && uv pip install -e .          # add ".[memory]" for mem0 persistence
+cp .env.example .env                    # then fill in your Langfuse keys
 ```
 
-Do not commit real keys. The repository intentionally does not store production or personal secrets.
-
-## Quickstart
+## Run
 
 ```bash
-./start.sh
+./start.sh     # starts Ollama, Langfuse and the A2A servers, then opens the REPL
+ares           # or just the REPL, if the services are already up
 ```
 
-The script checks or starts:
+`start.sh` checks or starts:
 
 - Ollama on `localhost:11434`
 - Langfuse on `localhost:3000`
 - A2A agent services on ports `8100` to `8104`
-- the terminal REPL through `main.py`
+
+`/serena` works on the directory you launch Ares from. Set `ARES_SERENA_PROJECT` to point it somewhere else.
+
+## Built on
+
+Ares uses [OpenJarvis](https://github.com/open-jarvis/OpenJarvis) (Apache-2.0) as its agent runtime: the ReAct and orchestrator agents, loop guard, tools, event bus, trace store and A2A server. The agent roster, routing, Serena integration, memory wiring, Langfuse exporter and REPL are Ares's own.
 
 ## Status
 
-This is an experimental personal AI system. It is useful as a portfolio project for local AI orchestration, but it still assumes a local machine layout and model setup. Next improvements should include a one-command installer, sample config, and Dockerised agent services.
+This is an experimental personal AI system. It is useful as a portfolio project for local AI orchestration, and it expects the local Ollama models above to be pulled. Next improvement: Dockerised agent services.
 
-Automated tests live in `tests/` (`pytest`), covering A2A endpoints, config loading, agent handoff, conversation history, and the Serena tool wrappers.
+Tests live in `tests/` and run on every push (`uv pip install -e ".[dev]" && pytest`), covering A2A endpoints, config loading, agent handoff, conversation history, and the Serena tool wrappers.

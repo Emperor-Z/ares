@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ares — terminal REPL entry point."""
+"""Ares — terminal REPL entry point (installed as the `ares` command)."""
 
 from __future__ import annotations
 
@@ -8,19 +8,8 @@ import os
 import sys
 from pathlib import Path
 
-# Fallback path setup for direct invocation (start.sh sets PYTHONPATH instead).
-_root = Path(__file__).parent
-_core = _root.parent / "ares-core"
-for _p in [
-    str(_core / "src"),
-    str(_core / ".venv" / "lib" / "python3.13" / "site-packages"),
-    str(_root),
-]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
 # Load .env before anything else so env vars are available to all modules.
-_env_file = _root / ".env"
+_env_file = Path.cwd() / ".env"
 if _env_file.exists():
     for _line in _env_file.read_text().splitlines():
         _line = _line.strip()

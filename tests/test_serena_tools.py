@@ -1,53 +1,6 @@
 """Tests for Serena tool wrappers with a fake SerenaClient."""
 
-import sys
-import types
 from unittest.mock import MagicMock, patch
-
-import pytest
-
-
-def _stub_openjarvis():
-    """Install fake openjarvis modules, returning the names that were newly added
-    (as opposed to already present) so the caller can remove only those."""
-    added = []
-    for mod_name in [
-        "openjarvis", "openjarvis.tools", "openjarvis.tools._stubs",
-        "openjarvis.core", "openjarvis.core.types",
-    ]:
-        if mod_name not in sys.modules:
-            sys.modules[mod_name] = types.ModuleType(mod_name)
-            added.append(mod_name)
-
-    class _BaseTool:
-        pass
-
-    class _ToolSpec:
-        def __init__(self, **kw):
-            self.__dict__.update(kw)
-
-    class _ToolResult:
-        def __init__(self, tool_name, content, success, metadata=None):
-            self.tool_name = tool_name
-            self.content = content
-            self.success = success
-
-    sys.modules["openjarvis.tools._stubs"].BaseTool = _BaseTool
-    sys.modules["openjarvis.tools._stubs"].ToolSpec = _ToolSpec
-    sys.modules["openjarvis.core.types"].ToolResult = _ToolResult
-    return added
-
-
-@pytest.fixture(autouse=True)
-def _inject():
-    added = _stub_openjarvis()
-    sys.modules.pop("ares.tools.serena_tools", None)
-    sys.modules.pop("ares.serena_client", None)
-    yield
-    sys.modules.pop("ares.tools.serena_tools", None)
-    sys.modules.pop("ares.serena_client", None)
-    for mod_name in added:
-        sys.modules.pop(mod_name, None)
 
 
 def _make_fake_client(return_value="symbol found at main.py:10"):
@@ -57,7 +10,7 @@ def _make_fake_client(return_value="symbol found at main.py:10"):
 
 
 def test_find_symbol_calls_mcp():
-    with patch("ares.serena_client.get_serena_client", return_value=_make_fake_client("def foo at foo.py:5")):
+    with patch("ares.tools.serena_tools.get_serena_client", return_value=_make_fake_client("def foo at foo.py:5")):
         from ares.tools.serena_tools import FindSymbolTool
         tool = FindSymbolTool()
         result = tool.execute(name_or_pattern="foo")
@@ -68,7 +21,7 @@ def test_find_symbol_calls_mcp():
 def test_find_symbol_mcp_error_returns_failure():
     client = MagicMock()
     client.call_tool.side_effect = RuntimeError("MCP process died")
-    with patch("ares.serena_client.get_serena_client", return_value=client):
+    with patch("ares.tools.serena_tools.get_serena_client", return_value=client):
         from ares.tools.serena_tools import FindSymbolTool
         tool = FindSymbolTool()
         result = tool.execute(name_or_pattern="foo")
@@ -78,7 +31,7 @@ def test_find_symbol_mcp_error_returns_failure():
 
 def test_rename_symbol_passes_args():
     client = _make_fake_client("renamed foo → bar in 3 files")
-    with patch("ares.serena_client.get_serena_client", return_value=client):
+    with patch("ares.tools.serena_tools.get_serena_client", return_value=client):
         from ares.tools.serena_tools import RenameSymbolTool
         tool = RenameSymbolTool()
         tool.execute(symbol_name="foo", relative_path="main.py", new_name="bar")
@@ -89,7 +42,7 @@ def test_rename_symbol_passes_args():
 
 
 def test_all_serena_tools_instantiate():
-    with patch("ares.serena_client.get_serena_client", return_value=_make_fake_client()):
+    with patch("ares.tools.serena_tools.get_serena_client", return_value=_make_fake_client()):
         from ares.tools.serena_tools import all_serena_tools
         tools = all_serena_tools()
         assert len(tools) == 7
@@ -102,10 +55,28 @@ def test_all_serena_tools_instantiate():
 
 def test_none_args_excluded_from_mcp_call():
     client = _make_fake_client("ok")
-    with patch("ares.serena_client.get_serena_client", return_value=client):
+    with patch("ares.tools.serena_tools.get_serena_client", return_value=client):
         from ares.tools.serena_tools import FindSymbolTool
         tool = FindSymbolTool()
         # substring_matching is optional — if not passed, should not appear in MCP call
         tool.execute(name_or_pattern="bar", substring_matching=None)
-        _, kwargs = client.call_tool.call_args
         assert "substring_matching" not in client.call_tool.call_args[0][1]
+
+
+def test_client_is_started_with_a_project(monkeypatch, tmp_path):
+    import ares.serena_client as sc
+    monkeypatch.setattr(sc, "_client", None)
+    monkeypatch.setenv("ARES_SERENA_PROJECT", str(tmp_path))
+    with patch.object(sc, "SerenaClient") as fake:
+        sc.get_serena_client()
+    fake.assert_called_once_with(project=str(tmp_path))
+
+
+def test_client_project_defaults_to_cwd(monkeypatch, tmp_path):
+    import ares.serena_client as sc
+    monkeypatch.setattr(sc, "_client", None)
+    monkeypatch.delenv("ARES_SERENA_PROJECT", raising=False)
+    monkeypatch.chdir(tmp_path)
+    with patch.object(sc, "SerenaClient") as fake:
+        sc.get_serena_client()
+    fake.assert_called_once_with(project=str(tmp_path))
