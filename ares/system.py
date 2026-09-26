@@ -11,7 +11,7 @@ from ares.agents import thinker as _thinker_mod
 from ares.agents import runner as _runner_mod
 from ares.agents import orchestrator as _orch_mod
 from ares.agents import serena_agent as _serena_mod
-from ares.memory import wire_memory_to_bus
+from ares import memory
 from ares.observability import wire_observability, wrap_with_collector
 from ares.learning import build_learning_orchestrator, run_cycle
 
@@ -38,10 +38,11 @@ def _format_history(history: list[dict], prompt: str) -> str:
 class AresSystem:
     """Initialise and hold all Ares agents + shared infrastructure."""
 
-    def __init__(self) -> None:
+    def __init__(self, use_memory: bool = True) -> None:
+        # Local Qdrant allows one process per store, so only the REPL owns it.
+        self.use_memory = use_memory
         self.bus = EventBus()
 
-        wire_memory_to_bus(self.bus)
         wire_observability(self.bus)
 
         logger.info("Building agents...")
@@ -65,37 +66,38 @@ class AresSystem:
         logger.info("Ares ready.")
 
     def run(self, prompt: str, history: list[dict] | None = None) -> str:
-        """Route a prompt through the orchestrator, injecting conversation history."""
-        full_prompt = _format_history(history or [], prompt)
-        result = self.orchestrator.run(full_prompt)
-        self._maybe_learn()
-        return result.content or "(no output)"
+        """Route a prompt through the orchestrator."""
+        return self._run(self.orchestrator, prompt, history)
 
     def coder_run(self, prompt: str, history: list[dict] | None = None) -> str:
-        result = self.coder.run(_format_history(history or [], prompt))
-        self._maybe_learn()
-        return result.content or "(no output)"
+        return self._run(self.coder, prompt, history)
 
     def thinker_run(self, prompt: str, history: list[dict] | None = None) -> str:
-        result = self.thinker.run(_format_history(history or [], prompt))
-        self._maybe_learn()
-        return result.content or "(no output)"
+        return self._run(self.thinker, prompt, history)
 
     def runner_run(self, prompt: str, history: list[dict] | None = None) -> str:
-        result = self.runner.run(_format_history(history or [], prompt))
-        self._maybe_learn()
-        return result.content or "(no output)"
+        return self._run(self.runner, prompt, history)
 
     def serena_run(self, prompt: str, history: list[dict] | None = None) -> str:
-        result = self.serena.run(_format_history(history or [], prompt))
+        return self._run(self.serena, prompt, history)
+
+    def _run(self, agent, prompt: str, history: list[dict] | None) -> str:
+        full_prompt = _format_history(history or [], prompt)
+        if self.use_memory:
+            full_prompt = memory.with_memories(full_prompt, memory.recall(prompt))
+        content = agent.run(full_prompt).content or "(no output)"
+        if self.use_memory:
+            memory.remember_exchange(prompt, content)
         self._maybe_learn()
-        return result.content or "(no output)"
+        return content
 
     def learn_now(self) -> dict:
         return run_cycle(self.learner)
 
     def shutdown(self) -> None:
-        """Graceful shutdown: close Serena subprocess and flush traces."""
+        """Graceful shutdown: finish memory writes, close Serena subprocess."""
+        if self.use_memory:
+            memory.close()
         try:
             from ares.serena_client import _client
             if _client is not None:
@@ -137,12 +139,11 @@ def build_single_agent(name: str):
         raise ValueError(f"Unknown agent: {name!r}")
 
     bus = EventBus()
-    wire_memory_to_bus(bus)
     wire_observability(bus)
 
     if name == "orchestrator":
         # Orchestrator needs all sub-agents; build the full system.
-        system = AresSystem()
+        system = AresSystem(use_memory=False)
         return system.run, system.bus
 
     agent = wrap_with_collector(_AGENT_BUILDERS[name](bus), bus)

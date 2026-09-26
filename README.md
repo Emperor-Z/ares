@@ -4,7 +4,7 @@
 
 Local multi-agent AI system for running specialised assistants on a personal machine. Ares combines local Ollama models, role-specific agents, A2A HTTP services, memory, Serena code-navigation integration, and Langfuse observability behind a terminal REPL.
 
-Ares is also the orchestration backbone underneath the [VeriSim](https://github.com/Emperor-Z/verisim) dissertation system, handling local agent routing and memory for that project.
+Its persona-per-agent design with a hidden orchestrator was the model for the multi-agent approach in [VeriSim](https://github.com/Emperor-Z/verisim), my MSc dissertation prototype. VeriSim is a separate codebase and doesn't run on Ares.
 
 ## Demo
 
@@ -19,7 +19,8 @@ A real local session: `./start.sh` boots Ollama, Langfuse, and all five A2A agen
 - Runs local models through Ollama instead of hosted model APIs
 - Exposes A2A health endpoints for individual agents
 - Tracks runs through a local/self-hosted Langfuse stack
-- Includes a learning cycle hook for memory and behaviour refinement experiments
+- Remembers facts about you and your projects across sessions, fully locally (mem0 + Ollama + on-disk Qdrant)
+- Includes a learning cycle hook for behaviour refinement experiments
 
 ## Architecture
 
@@ -49,6 +50,9 @@ AresSystem
 /runner <task>   quick execution-oriented task
 /serena <task>   codebase-aware navigation and edits
 /learn           run the learning cycle
+/remember <fact> store a fact verbatim
+/memories        list what Ares remembers
+/forget          delete all memories (asks first)
 /quit            exit the REPL
 ```
 
@@ -64,7 +68,8 @@ AresSystem
 ```bash
 git clone https://github.com/Emperor-Z/ares.git
 cd ares
-uv venv && uv pip install -e .          # add ".[memory]" for mem0 persistence
+uv venv && uv pip install -e ".[memory]"  # drop [memory] to skip long-term memory
+ollama pull nomic-embed-text             # embeddings for memory
 cp .env.example .env                    # then fill in your Langfuse keys
 ```
 
@@ -82,6 +87,12 @@ ares           # or just the REPL, if the services are already up
 - A2A agent services on ports `8100` to `8104`
 
 `/serena` works on the directory you launch Ares from. Set `ARES_SERENA_PROJECT` to point it somewhere else.
+
+## Memory
+
+With the `memory` extra installed, Ares recalls related memories before each prompt and adds them to the context. After each reply it hands the exchange to a small local model (`qwen2.5-coder:3b` by default) in the background, which pulls out facts worth keeping: your projects, tools, hardware, preferences and deadlines. Everything stays in `~/.ares/memory`. mem0's telemetry is switched off.
+
+Extraction takes a few seconds per reply on an RTX 3050 Ti and doesn't block the REPL. A 3B model misses vague statements, so use `/remember` for anything that matters. Set `ARES_MEMORY=0` to turn memory off.
 
 ## Built on
 

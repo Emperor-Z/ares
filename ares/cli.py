@@ -22,6 +22,7 @@ logging.basicConfig(
     format="%(levelname)s %(name)s: %(message)s",
 )
 
+from ares import memory
 from ares.system import AresSystem
 
 BANNER = """
@@ -29,6 +30,7 @@ BANNER = """
 ║  Ares  —  local AI  —  terminal     ║
 ║  /coder  /thinker  /runner          ║
 ║  /serena /learn    /quit            ║
+║  /remember /memories /forget        ║
 ╚══════════════════════════════════════╝
 """
 
@@ -73,6 +75,26 @@ def main() -> None:
             print("Running rlm learning cycle...")
             summary = system.learn_now()
             print(f"Done: {summary}\n")
+            continue
+
+        if raw.startswith("/remember "):
+            fact = raw[len("/remember "):].strip()
+            print("Remembered.\n" if memory.remember(fact) else "[memory off]\n")
+            continue
+
+        if raw == "/memories":
+            items = memory.list_all()
+            if not items:
+                print("No memories yet (or memory is off).\n")
+            for m in items:
+                print(f"  - {m.get('memory')}")
+            print()
+            continue
+
+        if raw == "/forget":
+            if input("Delete ALL memories? [y/N] ").strip().lower() == "y":
+                memory.forget_all()
+                print("Forgotten.\n")
             continue
 
         direct_method = None

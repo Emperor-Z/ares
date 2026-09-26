@@ -96,7 +96,8 @@ def _trace_to_langfuse_body(trace: Any) -> dict:
 
 def _ts(unix: float) -> str:
     import datetime
-    return datetime.datetime.utcfromtimestamp(unix).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+    dt = datetime.datetime.fromtimestamp(unix, datetime.UTC)
+    return dt.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
 
 
 def _on_trace_complete(event: Any) -> None:
