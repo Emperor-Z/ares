@@ -1,33 +1,5 @@
 """Tests for conversation history formatting in system.py."""
 
-import sys
-import types
-from unittest.mock import MagicMock
-
-
-def _stub_deps():
-    for mod in [
-        "openjarvis", "openjarvis.core", "openjarvis.core.events",
-        "openjarvis.agents", "openjarvis.agents.orchestrator",
-        "openjarvis.agents.loop_guard", "openjarvis.agents._stubs",
-        "openjarvis.agents.native_react", "openjarvis.agents.native_openhands",
-        "openjarvis.tools", "openjarvis.tools._stubs",
-        "openjarvis.tools.shell_exec", "openjarvis.tools.file_read",
-        "openjarvis.tools.file_write", "openjarvis.tools.calculator",
-        "openjarvis.traces", "openjarvis.traces.collector",
-        "openjarvis.traces.store", "openjarvis.engine",
-        "openjarvis.engine.ollama", "openjarvis.learning",
-        "openjarvis.learning.learning_orchestrator",
-    ]:
-        sys.modules.setdefault(mod, types.ModuleType(mod))
-
-    sys.modules["openjarvis.core.events"].EventBus = MagicMock
-    sys.modules["openjarvis.traces.collector"].TraceCollector = MagicMock
-    sys.modules["openjarvis.traces.store"].TraceStore = MagicMock
-
-
-_stub_deps()
-
 # Import the private formatter directly without building a full AresSystem
 from ares.system import _format_history
 

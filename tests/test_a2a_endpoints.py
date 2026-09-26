@@ -1,53 +1,5 @@
 """Tests for A2A HTTP endpoint shape (health + agent card)."""
 
-import sys
-import types
-from unittest.mock import MagicMock
-
-import pytest
-
-# ── stubs ─────────────────────────────────────────────────────────────────────
-
-def _stub_openjarvis():
-    """Install fake openjarvis modules, returning the names that were newly added
-    (as opposed to already present) so the caller can remove only those."""
-    added = []
-    for mod_name in [
-        "openjarvis", "openjarvis.a2a", "openjarvis.a2a.protocol",
-        "openjarvis.a2a.server",
-    ]:
-        if mod_name not in sys.modules:
-            sys.modules[mod_name] = types.ModuleType(mod_name)
-            added.append(mod_name)
-
-    class _AgentCard:
-        def __init__(self, **kw):
-            self.__dict__.update(kw)
-        def to_dict(self):
-            return {k: v for k, v in self.__dict__.items()}
-
-    class _A2AServer:
-        def __init__(self, agent_card, handler, bus=None):
-            self.card = agent_card
-            self.handler = handler
-        def handle_request(self, req):
-            prompt = req.get("params", {}).get("message", {}).get("parts", [{}])[0].get("text", "")
-            return {"result": {"parts": [{"text": self.handler(prompt)}]}}
-
-    sys.modules["openjarvis.a2a.protocol"].AgentCard = _AgentCard
-    sys.modules["openjarvis.a2a.server"].A2AServer = _A2AServer
-    return added
-
-
-@pytest.fixture(autouse=True)
-def _inject():
-    added = _stub_openjarvis()
-    sys.modules.pop("ares.a2a_server", None)
-    yield
-    sys.modules.pop("ares.a2a_server", None)
-    for mod_name in added:
-        sys.modules.pop(mod_name, None)
-
 
 def _make_app(agent_name: str, handler=None):
     from ares.a2a_server import make_app

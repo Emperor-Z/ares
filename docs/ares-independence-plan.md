@@ -17,6 +17,12 @@
 - `tests/` suite added covering history, handoff, Serena tools, A2A endpoints,
   and config.
 - This plan document added under `docs/`.
+- Packaged with `pyproject.toml`: OpenJarvis is now a declared PyPI dependency
+  (`openjarvis>=1.0.4,<1.1`) instead of a sibling `ares-core` checkout on
+  `sys.path`. `main.py` moved to `ares/cli.py` (`ares` console script).
+- Test suite no longer stubs `openjarvis`; runs in CI on Python 3.12/3.13.
+- `/serena` fixed: the MCP client now starts with a project
+  (`ARES_SERENA_PROJECT`, default cwd).
 
 ### Next
 - Add `ares/runtime/` boundary modules (phase 1 facade).
