@@ -15,6 +15,8 @@ import subprocess
 import threading
 from typing import Any
 
+from ares import __version__
+
 logger = logging.getLogger(__name__)
 
 _PROTOCOL_VERSION = "2024-11-05"
@@ -87,7 +89,7 @@ class SerenaClient:
             "params": {
                 "protocolVersion": _PROTOCOL_VERSION,
                 "capabilities": {},
-                "clientInfo": {"name": "ares", "version": "0.1.0"},
+                "clientInfo": {"name": "ares", "version": __version__},
             },
         })
         self._recv_for_id(msg_id)

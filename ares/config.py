@@ -12,7 +12,6 @@ OLLAMA_HOST = os.environ.get("ARES_OLLAMA_HOST", "http://localhost:11434")
 # Model aliases — match existing Ollama pulls
 SWIFT   = os.environ.get("ARES_RUNNER_MODEL",       "qwen2.5-coder:3b")
 FORGE   = os.environ.get("ARES_CODER_MODEL",        "qwen2.5-coder:7b")
-SAGE    = "qwen3:4b"
 FLUX    = os.environ.get("ARES_ORCHESTRATOR_MODEL", "qwen3.5:4b")
 RUNE    = os.environ.get("ARES_THINKER_MODEL",      "deepseek-r1:7b")
 EMBED   = "nomic-embed-text"
