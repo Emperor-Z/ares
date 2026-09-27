@@ -1,7 +1,7 @@
-"""OpenJarvis tool wrappers around Serena's key MCP tools.
+"""Ares tool wrappers around Serena's key MCP tools.
 
 Each tool delegates to the shared SerenaClient singleton, translating
-OpenJarvis's BaseTool.execute() interface into MCP stdio calls.
+the BaseTool.execute() interface into MCP stdio calls.
 """
 
 from __future__ import annotations
