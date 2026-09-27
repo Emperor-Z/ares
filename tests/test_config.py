@@ -62,3 +62,24 @@ def test_required_models_listed():
     assert cfg.FORGE in cfg.REQUIRED_MODELS
     assert cfg.RUNE in cfg.REQUIRED_MODELS
     assert cfg.SWIFT in cfg.REQUIRED_MODELS
+
+
+def test_env_files_fill_gaps_without_overriding(tmp_path, monkeypatch):
+    from ares.cli import _load_env
+
+    first = tmp_path / "first.env"
+    first.write_text("# comment\nARES_T_A=from_first\nARES_T_B='quoted'\n")
+    second = tmp_path / "second.env"
+    second.write_text("ARES_T_A=from_second\nARES_T_C=from_second\n")
+    monkeypatch.setenv("ARES_T_C", "from_shell")
+    for key in ("ARES_T_A", "ARES_T_B"):
+        monkeypatch.delenv(key, raising=False)
+
+    _load_env([first, tmp_path / "missing.env", second])
+
+    import os
+    assert os.environ["ARES_T_A"] == "from_first"
+    assert os.environ["ARES_T_B"] == "quoted"
+    assert os.environ["ARES_T_C"] == "from_shell"
+    for key in ("ARES_T_A", "ARES_T_B"):
+        monkeypatch.delenv(key)

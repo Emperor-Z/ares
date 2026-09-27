@@ -37,7 +37,9 @@ _INSTRUCTIONS = (
 _mem0: Any = None
 _mem0_failed = False
 _lock = threading.Lock()
-# One worker keeps writes in order and stops them piling onto the GPU.
+# Every write goes through this one worker: it keeps them in order, stops
+# them piling onto the GPU, and keeps two threads from writing to the local
+# Qdrant store at once.
 _writer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ares-memory")
 
 
@@ -122,7 +124,7 @@ def remember(fact: str) -> bool:
     """Store `fact` verbatim, skipping LLM extraction."""
     if _get() is None or not fact.strip():
         return False
-    return _add(fact, False)
+    return _writer.submit(_add, fact, False).result()
 
 
 def _add(content: Any, infer: bool) -> bool:
@@ -148,7 +150,7 @@ def list_all(limit: int = 50) -> list[dict]:
 def forget_all() -> None:
     mem = _get()
     if mem is not None:
-        mem.delete_all(user_id=USER_ID)
+        _writer.submit(mem.delete_all, user_id=USER_ID).result()
 
 
 def with_memories(prompt: str, memories: list[str]) -> str:
