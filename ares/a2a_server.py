@@ -98,8 +98,10 @@ def make_app(agent_name: str, handler_fn: Any, bus: Any = None) -> FastAPI:
     async def agent_card() -> JSONResponse:
         return JSONResponse(card.to_dict())
 
+    # Plain def: agent runs block, so FastAPI must run this in its threadpool
+    # or /health and every other request stall until the task finishes.
     @app.post("/a2a/tasks")
-    async def handle_task(request: dict) -> JSONResponse:
+    def handle_task(request: dict) -> JSONResponse:
         result = server.handle_request(request)
         return JSONResponse(result)
 
