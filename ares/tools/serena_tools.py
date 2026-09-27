@@ -6,12 +6,22 @@ the BaseTool.execute() interface into MCP stdio calls.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from openjarvis.tools._stubs import BaseTool, ToolSpec
 from openjarvis.core.types import ToolResult
 
 from ares.serena_client import get_serena_client
+
+logger = logging.getLogger(__name__)
+
+# Parameter names follow Serena's own tool schemas (checked against 1.3).
+# check_schemas() warns at first use if a Serena upgrade renames them again.
+_NAME_PATH = 'Name path: a symbol name like "AresSystem", or "AresSystem/run" for a method.'
+# Serena reports tool failures as ordinary text, not JSON-RPC errors.
+_SERENA_ERROR = "Error executing tool"
+_checked = False
 
 
 class _SerenaTool(BaseTool):
@@ -20,10 +30,43 @@ class _SerenaTool(BaseTool):
 
     def _call(self, mcp_name: str, **kwargs: Any) -> ToolResult:
         try:
-            content = get_serena_client().call_tool(mcp_name, {k: v for k, v in kwargs.items() if v is not None})
-            return ToolResult(tool_name=self.spec.name, content=content, success=True)
+            client = get_serena_client()
+            _check_once(client)
+            content = client.call_tool(mcp_name, {k: v for k, v in kwargs.items() if v is not None})
         except Exception as exc:
             return ToolResult(tool_name=self.spec.name, content=str(exc), success=False)
+        return ToolResult(tool_name=self.spec.name, content=content, success=not content.startswith(_SERENA_ERROR))
+
+
+def schema_mismatches(serena_schemas: dict[str, dict]) -> list[str]:
+    """Differences between our tool specs and Serena's, one line per problem."""
+    problems = []
+    for tool in all_serena_tools():
+        spec = tool.spec
+        theirs = serena_schemas.get(spec.name)
+        if theirs is None:
+            problems.append(f"{spec.name}: not offered by this Serena")
+            continue
+        props = set(theirs.get("properties", {}))
+        unknown = sorted(set(spec.parameters["properties"]) - props)
+        missing = sorted(set(theirs.get("required", [])) - set(spec.parameters["properties"]))
+        if unknown or missing:
+            problems.append(f"{spec.name}: unknown params {unknown}, missing required {missing}")
+    return problems
+
+
+def _check_once(client: Any) -> None:
+    global _checked
+    if _checked:
+        return
+    _checked = True
+    try:
+        problems = schema_mismatches(client.list_tools())
+    except Exception as exc:
+        logger.debug("Serena schema check skipped: %s", exc)
+        return
+    for problem in problems:
+        logger.warning("Serena tool mismatch, update ares/tools/serena_tools.py: %s", problem)
 
 
 class FindSymbolTool(_SerenaTool):
@@ -33,14 +76,16 @@ class FindSymbolTool(_SerenaTool):
     def spec(self) -> ToolSpec:
         return ToolSpec(
             name="find_symbol",
-            description="Find a symbol (function, class, variable) by name or pattern in the codebase. Returns file locations and signatures.",
+            description="Find a symbol (function, class, method) by name path. Returns file locations and signatures.",
             parameters={
                 "type": "object",
                 "properties": {
-                    "name_or_pattern": {"type": "string", "description": "Symbol name or regex pattern."},
-                    "substring_matching": {"type": "boolean", "description": "Match substrings. Default false."},
+                    "name_path_pattern": {"type": "string", "description": _NAME_PATH},
+                    "relative_path": {"type": "string", "description": "Only search this file or directory. Omit to search the whole project."},
+                    "substring_matching": {"type": "boolean", "description": "Match the last part as a substring, so \"Foo/get\" finds \"Foo/getValue\". Default false."},
+                    "include_body": {"type": "boolean", "description": "Include the symbol's source code. Default false."},
                 },
-                "required": ["name_or_pattern"],
+                "required": ["name_path_pattern"],
             },
             category="serena_semantic",
             timeout_seconds=30.0,
@@ -85,10 +130,10 @@ class FindReferencingSymbolsTool(_SerenaTool):
             parameters={
                 "type": "object",
                 "properties": {
-                    "symbol_name": {"type": "string", "description": "Name of the symbol to find references for."},
+                    "name_path": {"type": "string", "description": f"The symbol to find references to. {_NAME_PATH}"},
                     "relative_path": {"type": "string", "description": "File that contains the symbol definition."},
                 },
-                "required": ["symbol_name", "relative_path"],
+                "required": ["name_path", "relative_path"],
             },
             category="serena_semantic",
             timeout_seconds=30.0,
@@ -105,15 +150,15 @@ class ReplaceSymbolBodyTool(_SerenaTool):
     def spec(self) -> ToolSpec:
         return ToolSpec(
             name="replace_symbol_body",
-            description="Replace a function or class body by symbol name — more reliable than line-based editing, works across file sizes.",
+            description="Replace a function or class definition by name path — more reliable than line-based editing. Look the symbol up with find_symbol (include_body) first.",
             parameters={
                 "type": "object",
                 "properties": {
-                    "symbol_name": {"type": "string", "description": "Name of the function/class to replace."},
+                    "name_path": {"type": "string", "description": f"The symbol to replace. {_NAME_PATH}"},
                     "relative_path": {"type": "string", "description": "File containing the symbol."},
-                    "new_body": {"type": "string", "description": "New body content (indented, excluding the def/class header line)."},
+                    "body": {"type": "string", "description": "The full new definition, including the def/class signature line. Excludes any docstring or comments above it."},
                 },
-                "required": ["symbol_name", "relative_path", "new_body"],
+                "required": ["name_path", "relative_path", "body"],
             },
             category="serena_semantic",
             timeout_seconds=30.0,
@@ -134,11 +179,11 @@ class InsertAfterSymbolTool(_SerenaTool):
             parameters={
                 "type": "object",
                 "properties": {
-                    "symbol_name": {"type": "string", "description": "Symbol after which to insert code."},
+                    "name_path": {"type": "string", "description": f"The symbol after which to insert code. {_NAME_PATH}"},
                     "relative_path": {"type": "string", "description": "File containing the symbol."},
-                    "new_content": {"type": "string", "description": "Code to insert."},
+                    "body": {"type": "string", "description": "Code to insert, starting on the line after the symbol."},
                 },
-                "required": ["symbol_name", "relative_path", "new_content"],
+                "required": ["name_path", "relative_path", "body"],
             },
             category="serena_semantic",
             timeout_seconds=30.0,
@@ -159,10 +204,10 @@ class SearchForPatternTool(_SerenaTool):
             parameters={
                 "type": "object",
                 "properties": {
-                    "pattern": {"type": "string", "description": "Regex pattern to search for."},
+                    "substring_pattern": {"type": "string", "description": "Regex pattern to search for."},
                     "relative_path": {"type": "string", "description": "Scope to this path. Omit to search whole project."},
                 },
-                "required": ["pattern"],
+                "required": ["substring_pattern"],
             },
             category="serena_semantic",
             timeout_seconds=30.0,
@@ -183,11 +228,11 @@ class RenameSymbolTool(_SerenaTool):
             parameters={
                 "type": "object",
                 "properties": {
-                    "symbol_name": {"type": "string", "description": "Current symbol name."},
+                    "name_path": {"type": "string", "description": f"The symbol to rename. {_NAME_PATH}"},
                     "relative_path": {"type": "string", "description": "File containing the symbol definition."},
                     "new_name": {"type": "string", "description": "New name for the symbol."},
                 },
-                "required": ["symbol_name", "relative_path", "new_name"],
+                "required": ["name_path", "relative_path", "new_name"],
             },
             category="serena_semantic",
             timeout_seconds=60.0,
