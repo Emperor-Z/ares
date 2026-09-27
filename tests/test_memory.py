@@ -92,3 +92,15 @@ def test_run_without_memory_leaves_prompt_alone(monkeypatch):
 
     system._run(agent, "hello", [])
     agent.run.assert_called_once_with("hello")
+
+
+def test_direct_writes_share_the_background_writer(fake_mem0):
+    import threading
+    threads = []
+    fake_mem0.add.side_effect = lambda *a, **k: threads.append(threading.current_thread().name)
+    fake_mem0.delete_all.side_effect = lambda **k: threads.append(threading.current_thread().name)
+    memory.remember_exchange("I use FYERS", "ok")
+    memory.remember("prefers tabs")
+    memory.forget_all()
+    assert len(threads) == 3
+    assert all(name.startswith("ares-memory") for name in threads)
