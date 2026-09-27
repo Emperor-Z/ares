@@ -67,10 +67,9 @@ def test_config_is_fully_local():
 def _system(use_memory):
     system = AresSystem.__new__(AresSystem)
     system.use_memory = use_memory
-    system._interaction_count = 0
-    system._learn_every = 1000
     agent = MagicMock()
     agent.run.return_value = SimpleNamespace(content="answer")
+    system.coder = agent
     return system, agent
 
 
@@ -80,7 +79,7 @@ def test_run_injects_memories_and_saves_exchange(monkeypatch):
     monkeypatch.setattr(memory, "remember_exchange", lambda p, r: saved.append((p, r)))
     system, agent = _system(use_memory=True)
 
-    assert system._run(agent, "what am I building?", []) == "answer"
+    assert system._run("coder", "what am I building?", []) == "answer"
     assert "works on FundedIn" in agent.run.call_args[0][0]
     assert saved == [("what am I building?", "answer")]
 
@@ -90,7 +89,7 @@ def test_run_without_memory_leaves_prompt_alone(monkeypatch):
     monkeypatch.setattr(memory, "remember_exchange", MagicMock(side_effect=AssertionError))
     system, agent = _system(use_memory=False)
 
-    system._run(agent, "hello", [])
+    system._run("coder", "hello", [])
     agent.run.assert_called_once_with("hello")
 
 

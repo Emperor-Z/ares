@@ -53,7 +53,8 @@ HELP = """
   /remember <fact>   store a fact in long-term memory
   /memories          list what Ares remembers
   /forget            delete all memories (asks first)
-  /learn             run the learning cycle now
+  /good, /bad        rate the last reply; Ares learns which agent to route to
+  /learn             show what Ares has learned about routing
   /clear             forget this conversation (long-term memory is kept)
   /help, /quit
 """
@@ -64,7 +65,7 @@ AGENTS = {
     "/runner":  ("runner_run", "runner"),
     "/serena":  ("serena_run", "serena"),
 }
-COMMANDS = [*AGENTS, "/remember", "/memories", "/forget", "/learn", "/clear", "/help", "/quit"]
+COMMANDS = [*AGENTS, "/good", "/bad", "/remember", "/memories", "/forget", "/learn", "/clear", "/help", "/quit"]
 HISTORY_FILE = Path.home() / ".ares" / "history"
 
 
@@ -120,9 +121,21 @@ def _handle_command(system: AresSystem, raw: str, history: list[dict]) -> bool:
     arg = arg.strip()
     if cmd == "/help":
         print(HELP)
+    elif cmd in ("/good", "/bad"):
+        if system.rate(1.0 if cmd == "/good" else 0.0):
+            print("Thanks, noted.\n")
+        else:
+            print("Nothing to rate yet.\n")
     elif cmd == "/learn":
-        print("Running learning cycle...")
-        print(f"Done: {system.learn_now()}\n")
+        good, bad = system.routing_lessons()
+        if not good and not bad:
+            print("Nothing learned yet. Rate replies with /good or /bad.\n")
+        for label, lessons in (("Routed well", good), ("Routed badly", bad)):
+            if lessons:
+                print(f"{label}:")
+                for prompt, agent in lessons:
+                    print(f"  {agent:8} {prompt}")
+        print()
     elif cmd == "/remember":
         if not arg:
             print("Usage: /remember <fact>\n")
