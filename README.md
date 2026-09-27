@@ -53,6 +53,8 @@ AresSystem
 /remember <fact> store a fact verbatim
 /memories        list what Ares remembers
 /forget          delete all memories (asks first)
+/clear           forget this conversation (long-term memory is kept)
+/help            list commands
 /quit            exit the REPL
 ```
 
@@ -70,21 +72,24 @@ git clone https://github.com/Emperor-Z/ares.git
 cd ares
 uv venv && uv pip install -e ".[memory]"  # drop [memory] to skip long-term memory
 ollama pull nomic-embed-text             # embeddings for memory
-cp .env.example .env                    # then fill in your Langfuse keys
+cp .env.example .env                    # then fill in your Langfuse keys (optional)
 ```
 
 ## Run
 
 ```bash
-./start.sh     # starts Ollama, Langfuse and the A2A servers, then opens the REPL
-ares           # or just the REPL, if the services are already up
+./start.sh        # starts Ollama, Langfuse and the A2A servers, then opens the REPL
+ares              # or just the REPL, from any directory
+./start.sh stop   # stop the A2A servers
 ```
 
 `start.sh` checks or starts:
 
-- Ollama on `localhost:11434`
-- Langfuse on `localhost:3000`
-- A2A agent services on ports `8100` to `8104`
+- Ollama at `ARES_OLLAMA_HOST` (default `localhost:11434`)
+- Langfuse on `localhost:3000`, if Docker is available. Without it, traces still go to `~/.ares/traces.db`
+- A2A agent services on ports `8100` to `8104`. They keep running after you quit the REPL; logs are in `~/.ares/logs/a2a.log`
+
+Settings are read from `~/.ares/.env`, then the `.env` in this checkout. Real environment variables win over both.
 
 `/serena` works on the directory you launch Ares from. Set `ARES_SERENA_PROJECT` to point it somewhere else.
 
