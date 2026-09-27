@@ -31,4 +31,5 @@ def build(bus: EventBus) -> NativeReActAgent:
     )
     # Replace default loop guard with Ares config
     agent._loop_guard = LoopGuard(LoopGuardConfig(**LOOP_GUARD), bus=bus)
+    agent.agent_id = "coder"  # upstream default is the class name, shared by several agents
     return agent

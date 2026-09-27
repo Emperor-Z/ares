@@ -32,4 +32,5 @@ def build(bus: EventBus) -> NativeReActAgent:
         max_tokens=cfg["max_tokens"],
     )
     agent._loop_guard = LoopGuard(LoopGuardConfig(**LOOP_GUARD), bus=bus)
+    agent.agent_id = "serena"  # upstream default is the class name, shared by several agents
     return agent
