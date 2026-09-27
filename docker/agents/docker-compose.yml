@@ -1,0 +1,29 @@
+# Ares A2A agent servers in Docker, talking to Ollama on the host.
+#   docker compose -f docker/agents/docker-compose.yml up -d --build
+#   ARES_PROJECT=~/code/myapp docker compose -f docker/agents/docker-compose.yml up -d   # serena's project
+services:
+  agents:
+    build:
+      context: ../..
+    image: ares-agents
+    container_name: ares_agents
+    restart: unless-stopped
+    # Ollama and Langfuse listen on 127.0.0.1 only. Host networking reaches them
+    # without exposing either, and the agents bind 127.0.0.1:8100-8104 as usual.
+    network_mode: host
+    user: "${ARES_UID:-1000}:${ARES_GID:-1000}"
+    env_file:
+      - path: ../../.env
+        required: false
+    environment:
+      # After env_file, so a host path in .env can't point inside the container.
+      ARES_TRACE_DB_PATH: /data/traces.db
+      ARES_FEEDBACK_PATH: /data/feedback.jsonl
+      ARES_SERENA_PROJECT: /workspace
+    volumes:
+      - ${HOME}/.ares:/data                  # traces and ratings, shared with the REPL
+      - ${ARES_PROJECT:-../..}:/workspace    # the project /serena works on
+      - ares_home:/home/ares                 # Serena config and language servers
+
+volumes:
+  ares_home:

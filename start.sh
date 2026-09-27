@@ -104,9 +104,14 @@ fi
 declare -A A2A_PORTS=([orchestrator]=8100 [coder]=8101 [thinker]=8102 [runner]=8103 [serena]=8104)
 AGENTS=(orchestrator coder thinker runner serena)
 a2a_up() { curl -sf "http://127.0.0.1:$1/health" &>/dev/null; }
+a2a_all_up() {
+    for agent in "${AGENTS[@]}"; do a2a_up "${A2A_PORTS[$agent]}" || return 1; done
+}
 
 if a2a_running; then
     ok "A2A agent servers already running (pid $(cat "$A2A_PID"))"
+elif a2a_all_up; then
+    ok "A2A agent servers already running (Docker or another launcher)"
 else
     warn "Starting A2A agent servers (log: $A2A_LOG)..."
     mkdir -p "$(dirname "$A2A_LOG")"
