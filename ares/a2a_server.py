@@ -162,6 +162,10 @@ def launch_all() -> list[multiprocessing.Process]:
 
 def serve_all() -> None:
     """Run every agent server in the foreground until SIGTERM or Ctrl-C."""
+    # Five servers creating a fresh trace DB at once race on its WAL setup
+    # and some die with "database is locked". Create it once, up front.
+    from ares.observability import init_trace_store
+    init_trace_store()
     procs = launch_all()
 
     def stop(*_: Any) -> None:
