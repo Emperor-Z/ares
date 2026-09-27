@@ -2,7 +2,8 @@
 
 TraceCollector wraps each agent and records every run() to a shared
 SQLite TraceStore. A Langfuse exporter subscribes to TRACE_COMPLETE
-events and ships them to self-hosted Langfuse at localhost:3000.
+events and ships them to self-hosted Langfuse on a background thread,
+so a slow or missing Langfuse never delays a reply.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import httpx
@@ -25,6 +27,8 @@ LANGFUSE_PK       = os.environ.get("LANGFUSE_PUBLIC_KEY", "")
 LANGFUSE_SK       = os.environ.get("LANGFUSE_SECRET_KEY", "")
 TRACE_DB_PATH     = os.environ.get("ARES_TRACE_DB_PATH", os.path.expanduser("~/.ares/traces.db"))
 
+_exporter = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ares-langfuse")
+
 
 # ---------------------------------------------------------------------------
 # Shared TraceStore
@@ -35,8 +39,7 @@ _store: TraceStore | None = None
 def get_trace_store() -> TraceStore:
     global _store
     if _store is None:
-        import os as _os
-        _os.makedirs(_os.path.dirname(TRACE_DB_PATH), exist_ok=True)
+        os.makedirs(os.path.dirname(TRACE_DB_PATH), exist_ok=True)
         _store = TraceStore(db_path=TRACE_DB_PATH)
     return _store
 
@@ -46,17 +49,18 @@ def get_trace_store() -> TraceStore:
 # ---------------------------------------------------------------------------
 
 def _trace_to_langfuse_body(trace: Any) -> dict:
-    """Convert an OJ Trace to Langfuse ingestion format."""
+    """Convert a Trace to Langfuse ingestion format."""
+    trace_id = trace.trace_id
     steps = []
     for i, step in enumerate(getattr(trace, "steps", [])):
         step_ts = _ts(getattr(step, "timestamp", time.time()))
         steps.append({
-            "id": f"{trace.query[:8]}-step-{i}",
+            "id": f"{trace_id}-step-{i}",
             "type": "span-create",
             "timestamp": step_ts,
             "body": {
-                "id": f"{trace.query[:8]}-step-{i}",
-                "traceId": trace.query[:32],
+                "id": f"{trace_id}-step-{i}",
+                "traceId": trace_id,
                 "name": str(getattr(step, "step_type", "step")),
                 "startTime": _ts(getattr(step, "timestamp", time.time())),
                 "endTime": _ts(getattr(step, "timestamp", time.time()) + getattr(step, "duration_seconds", 0)),
@@ -69,11 +73,11 @@ def _trace_to_langfuse_body(trace: Any) -> dict:
     started = getattr(trace, "started_at", time.time())
     body = [
         {
-            "id": trace.query[:32],
+            "id": trace_id,
             "type": "trace-create",
             "timestamp": _ts(started),
             "body": {
-                "id": trace.query[:32],
+                "id": trace_id,
                 "name": getattr(trace, "agent", "unknown"),
                 "input": trace.query,
                 "output": getattr(trace, "result", ""),
@@ -102,8 +106,12 @@ def _ts(unix: float) -> str:
 
 def _on_trace_complete(event: Any) -> None:
     trace = event.data.get("trace") if hasattr(event, "data") else event.get("trace")
-    if trace is None:
+    if trace is None or not (LANGFUSE_PK and LANGFUSE_SK):
         return
+    _exporter.submit(_export, trace)
+
+
+def _export(trace: Any) -> None:
     try:
         body = _trace_to_langfuse_body(trace)
         resp = httpx.post(
@@ -126,7 +134,10 @@ def _on_trace_complete(event: Any) -> None:
 def wire_observability(bus: EventBus) -> None:
     """Subscribe the Langfuse exporter to the bus. Call once at startup."""
     bus.subscribe(EventType.TRACE_COMPLETE, _on_trace_complete)
-    logger.info("Langfuse exporter wired to EventBus (target: %s)", LANGFUSE_HOST)
+    if LANGFUSE_PK and LANGFUSE_SK:
+        logger.info("Langfuse exporter wired to EventBus (target: %s)", LANGFUSE_HOST)
+    else:
+        logger.info("Langfuse keys not set; traces stay in %s", TRACE_DB_PATH)
 
 
 def wrap_with_collector(agent: Any, bus: EventBus) -> TraceCollector:
