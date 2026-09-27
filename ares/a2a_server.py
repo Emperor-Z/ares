@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import logging
 import multiprocessing
+import signal
+import sys
 from typing import Any
 
 import uvicorn
@@ -119,9 +121,8 @@ def make_app(agent_name: str, handler_fn: Any, bus: Any = None) -> FastAPI:
 def _run_agent_server(agent_name: str, port: int) -> None:
     """Build only the requested agent and serve it via A2A.
 
-    Subprocesses inherit PYTHONPATH from the parent (set by start.sh), so no
-    manual sys.path manipulation is needed here. Each server builds only its
-    own agent — not the full AresSystem — to avoid duplicating model setup.
+    Each server builds only its own agent, not the full AresSystem, so it
+    only pays for the agent it serves.
     """
     import logging
     logging.basicConfig(level=logging.WARNING)
@@ -134,18 +135,14 @@ def _run_agent_server(agent_name: str, port: int) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Public API — launch all four servers
+# Public API
 # ---------------------------------------------------------------------------
 
-def launch_all(background: bool = True) -> list[multiprocessing.Process]:
-    """Start all four A2A agent servers as subprocesses.
+def launch_all() -> list[multiprocessing.Process]:
+    """Start every agent server as a daemon subprocess and return the handles.
 
-    Args:
-        background: If True, return immediately with process handles.
-                    If False, block (useful for single-agent testing).
-
-    Returns:
-        List of started Process objects.
+    Daemon children die with this process, so the caller must stay alive for
+    as long as the servers should run. `serve_all()` does that.
     """
     procs = []
     for name, port in PORTS.items():
@@ -158,14 +155,31 @@ def launch_all(background: bool = True) -> list[multiprocessing.Process]:
         p.start()
         logger.info("A2A server %s started on port %d (pid=%d)", name, port, p.pid)
         procs.append(p)
-
-    if not background:
-        for p in procs:
-            p.join()
-
     return procs
+
+
+def serve_all() -> None:
+    """Run every agent server in the foreground until SIGTERM or Ctrl-C."""
+    procs = launch_all()
+
+    def stop(*_: Any) -> None:
+        for p in procs:
+            p.terminate()
+        for p in procs:
+            p.join(timeout=5)
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    for p in procs:
+        p.join()
 
 
 def launch_one(agent_name: str) -> None:
     """Run a single agent's A2A server in the foreground (for testing)."""
     _run_agent_server(agent_name, PORTS[agent_name])
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    serve_all()
