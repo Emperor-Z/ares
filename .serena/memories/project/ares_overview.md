@@ -1,31 +1,21 @@
 # Ares project overview
 
-Ares is a local terminal AI system in `/home/z/ares`. It is described by the initial commit as a "100% local multi-agent AI system".
+Ares is a local, offline-first multi-agent AI system (`/home/z/ares`). The
+full project record is `context.md` at the repo root. Read it first and keep
+it updated.
 
 Key files:
-- `main.py`: terminal REPL entry point. Loads `.env`, initializes `AresSystem`, supports `/coder`, `/thinker`, `/runner`, `/serena`, `/learn`, `/quit`.
-- `ares/system.py`: top-level wiring for EventBus, memory, observability, agents, orchestrator, Serena, and RLM learning. Contains `AresSystem` and `build_single_agent` for lightweight A2A subprocesses.
-- `ares/engine.py`: shared OllamaEngine singleton; validates Ollama health and checks required models from config.
-- `ares/config.py`: configuration for Ollama/models and related runtime settings.
-- `ares/a2a_server.py`: A2A server surface.
-- `ares/observability.py`, `ares/memory.py`, `ares/learning.py`, `ares/serena_client.py`: shared infrastructure.
+- `ares/cli.py`: the terminal REPL (`ares` / `python -m ares`). It loads settings from `~/.ares/.env` and then the checkout's `.env`. Commands: `/coder`, `/thinker`, `/runner`, `/serena`, `/good`, `/bad`, `/learn`, `/remember`, `/memories`, `/forget`, `/clear`, `/help`, `/quit`.
+- `ares/system.py`: `AresSystem` wires the agents, memory, tracing and learning, and records which agent answered, for ratings. `build_single_agent` is used by the A2A servers.
+- `ares/agents/`: one module per agent, all built through `_base.build_agent()`.
+- `ares/engine.py`: the shared Ollama engine, with streaming for the live view (`ares/live.py`).
+- `ares/learning.py`: turns `/good` and `/bad` ratings into orchestrator routing examples.
+- `ares/memory.py`: mem0 on Ollama with local Qdrant. All writes go through one worker thread.
+- `ares/observability.py`: traces to `~/.ares/traces.db`, plus optional Langfuse export.
+- `ares/a2a_server.py`: A2A servers on `127.0.0.1:8100-8104`. `python -m ares.a2a_server` runs them all.
+- `ares/tools/serena_tools.py`, `ares/serena_client.py`: Serena MCP tools. Parameter names follow Serena 1.3's schemas.
+- `start.sh`, `Dockerfile`, `docker/`: startup, containerised agents, and the Langfuse stack.
 
-Runtime shape:
-- Local Ollama backend (`ares/engine.py`).
-- Agents include coder, thinker, runner, serena, and orchestrator.
-- Conversation history is injected into agent prompts with a 10-message window.
-- Learning cycle can run via `/learn` or automatically every 20 interactions.
-- Serena MCP subprocess is closed during `AresSystem.shutdown()`.
-
-Current repository note as of 2026-05-19:
-- Single commit: `724a5d7 feat: initial Ares commit — 100% local multi-agent AI system`.
-- Worktree had uncommitted local changes in `.serena/project.yml`, `ares/a2a_server.py`, `ares/config.py`, `ares/engine.py`, `ares/observability.py`, `ares/system.py`, `main.py`, `start.sh`, plus new `.env.example`, `.serena/.gitignore`, and `tests/`.
-- Do not revert user changes unless explicitly requested.
-
-Strategic direction:
-- Ares is its own system; docs, startup text and comments refer to it only as Ares.
-
-Development style:
-- Prefer existing Ares patterns and introduce Ares-owned interfaces before replacing internals.
-- Use `rg`/symbol tools for exploration.
-- Keep changes scoped and verify with focused tests where possible.
+Conventions:
+- Refer to the project only as Ares in docs, comments and user-facing text.
+- One focused commit per logical change. Verify against real Ollama and Serena where possible, not just unit tests.
