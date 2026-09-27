@@ -1,4 +1,4 @@
-"""Ares — local multi-agent AI system built on OpenJarvis."""
+"""Ares — local multi-agent AI system."""
 
 __all__ = ["AresSystem"]
 

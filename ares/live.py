@@ -1,6 +1,6 @@
 """Live REPL view: shows which agent is working and streams the answer.
 
-Sub-agents run on OpenJarvis's tool thread pool, so anything happening on
+Sub-agents run on the runtime's tool thread pool, so anything happening on
 the REPL's own thread belongs to the agent the user addressed. Its tokens
 are the answer; everything else becomes a one-line status.
 """

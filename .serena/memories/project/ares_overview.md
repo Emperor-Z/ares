@@ -11,7 +11,7 @@ Key files:
 - `ares/observability.py`, `ares/memory.py`, `ares/learning.py`, `ares/serena_client.py`: shared infrastructure.
 
 Runtime shape:
-- Local Ollama backend via OpenJarvis `OllamaEngine`.
+- Local Ollama backend (`ares/engine.py`).
 - Agents include coder, thinker, runner, serena, and orchestrator.
 - Conversation history is injected into agent prompts with a 10-message window.
 - Learning cycle can run via `/learn` or automatically every 20 interactions.
@@ -23,9 +23,7 @@ Current repository note as of 2026-05-19:
 - Do not revert user changes unless explicitly requested.
 
 Strategic direction:
-- Ares should become its own proprietary, Ares-owned system rather than a visible mix of OpenJarvis components.
-- Near-term migration approach: Ares facade first. Add Ares-owned runtime APIs, move OpenJarvis imports behind private compatibility modules, then replace adapters with native Ares implementations over time.
-- Preserve Apache-2.0 license/attribution requirements for any OpenJarvis-derived code while making public docs, startup text, tests, and module boundaries present the product as Ares.
+- Ares is its own system; docs, startup text and comments refer to it only as Ares.
 
 Development style:
 - Prefer existing Ares patterns and introduce Ares-owned interfaces before replacing internals.

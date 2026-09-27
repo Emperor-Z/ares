@@ -5,7 +5,7 @@ set -euo pipefail
 ARES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON="${ARES_PYTHON:-$ARES_DIR/.venv/bin/python}"
 
-if ! "$PYTHON" -c "import ares, openjarvis" &>/dev/null; then
+if ! "$PYTHON" -c "import ares" &>/dev/null; then
     echo "[err] Ares is not installed for $PYTHON"
     echo "      Run: uv venv && uv pip install -e ."
     echo "      (or set ARES_PYTHON to an interpreter that has it installed)"

@@ -94,12 +94,8 @@ With the `memory` extra installed, Ares recalls related memories before each pro
 
 Extraction takes a few seconds per reply on an RTX 3050 Ti and doesn't block the REPL. A 3B model misses vague statements, so use `/remember` for anything that matters. Set `ARES_MEMORY=0` to turn memory off.
 
-## Built on
-
-Ares uses [OpenJarvis](https://github.com/open-jarvis/OpenJarvis) (Apache-2.0) as its agent runtime: the ReAct and orchestrator agents, loop guard, tools, event bus, trace store and A2A server. The agent roster, routing, Serena integration, memory wiring, Langfuse exporter and REPL are Ares's own.
-
 ## Status
 
-This is an experimental personal AI system. It is useful as a portfolio project for local AI orchestration, and it expects the local Ollama models above to be pulled. Next improvement: Dockerised agent services.
+Ares is in daily use for personal coding and work. It is still experimental and expects the local Ollama models above to be pulled. Next improvement: Dockerised agent services.
 
 Tests live in `tests/` and run on every push (`uv pip install -e ".[dev]" && pytest`), covering A2A endpoints, config loading, agent handoff, conversation history, and the Serena tool wrappers.
