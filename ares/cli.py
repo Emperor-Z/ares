@@ -8,14 +8,28 @@ import os
 import sys
 from pathlib import Path
 
-# Load .env before anything else so env vars are available to all modules.
-_env_file = Path.cwd() / ".env"
-if _env_file.exists():
-    for _line in _env_file.read_text().splitlines():
-        _line = _line.strip()
-        if _line and not _line.startswith("#") and "=" in _line:
-            _k, _, _v = _line.partition("=")
-            os.environ.setdefault(_k.strip(), _v.strip())
+# Ares is launched from whatever project you're working in (that's what
+# /serena attaches to), so its settings can't come from the cwd's .env.
+ENV_FILES = [
+    Path.home() / ".ares" / ".env",
+    Path(__file__).resolve().parent.parent / ".env",  # source checkout
+]
+
+
+def _load_env(files: list[Path]) -> None:
+    """Load KEY=VALUE lines into os.environ. Real env vars and earlier files win."""
+    for env_file in files:
+        if not env_file.is_file():
+            continue
+        for line in env_file.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, _, value = line.partition("=")
+                os.environ.setdefault(key.strip(), value.strip().strip("'\""))
+
+
+# Before the imports below, which read their settings at import time.
+_load_env(ENV_FILES)
 
 logging.basicConfig(
     level=logging.WARNING,
