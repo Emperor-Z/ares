@@ -1,6 +1,6 @@
 """rlm learning loop — mines traces, evolves agent configs.
 
-Wraps OJ's LearningOrchestrator. Call `run_cycle()` manually or
+Wraps the runtime's LearningOrchestrator. Call `run_cycle()` manually or
 schedule it periodically (e.g. every N interactions) from system.py.
 """
 

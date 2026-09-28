@@ -1,6 +1,6 @@
-"""Orchestrator — routes input to coder/thinker/runner via OrchestratorAgent.
+"""Orchestrator — routes input to coder/thinker/runner/serena via OrchestratorAgent.
 
-Uses swift (qwen2.5-coder:3b) for fast intent classification.
+Uses flux (qwen3.5:4b) for fast routing with native tool calling.
 Wraps each sub-agent as a local tool for in-process handoff.
 """
 
@@ -10,13 +10,11 @@ import logging
 from typing import Any
 
 from openjarvis.agents.orchestrator import OrchestratorAgent
-from openjarvis.agents.loop_guard import LoopGuard, LoopGuardConfig
 from openjarvis.agents._stubs import AgentResult
 from openjarvis.core.events import EventBus
 from openjarvis.tools._stubs import BaseTool, ToolSpec, ToolResult
 
-from ares.config import AGENT_DEFAULTS, LOOP_GUARD
-from ares.engine import get_engine
+from ares.agents._base import build_agent
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +88,6 @@ If the request is ambiguous, use call_thinker.
 
 
 def build(bus: EventBus, coder, thinker, runner, serena) -> OrchestratorAgent:
-    cfg = AGENT_DEFAULTS["orchestrator"]
-
     handoff_tools = [
         _AgentHandoffTool(
             "call_coder",
@@ -120,16 +116,9 @@ def build(bus: EventBus, coder, thinker, runner, serena) -> OrchestratorAgent:
         ),
     ]
 
-    agent = OrchestratorAgent(
-        get_engine(),
-        cfg["model"],
+    return build_agent(
+        OrchestratorAgent, bus, "orchestrator",
         tools=handoff_tools,
-        bus=bus,
-        max_turns=cfg["max_turns"],
-        temperature=cfg["temperature"],
-        max_tokens=cfg["max_tokens"],
         mode="function_calling",
         system_prompt=ORCHESTRATOR_SYSTEM_PROMPT,
     )
-    agent._loop_guard = LoopGuard(LoopGuardConfig(**LOOP_GUARD), bus=bus)
-    return agent
