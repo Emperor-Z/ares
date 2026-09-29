@@ -25,3 +25,6 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local project record, never committed
+context.md
