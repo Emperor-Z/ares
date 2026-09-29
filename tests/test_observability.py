@@ -43,3 +43,10 @@ def test_export_runs_off_the_calling_thread(monkeypatch):
     trace = _trace("q")
     observability._on_trace_complete(SimpleNamespace(data={"trace": trace}))
     submit.assert_called_once_with(observability._export, trace)
+
+
+def test_init_trace_store_creates_db(monkeypatch, tmp_path):
+    path = tmp_path / "nested" / "traces.db"
+    monkeypatch.setattr(observability, "TRACE_DB_PATH", str(path))
+    observability.init_trace_store()
+    assert path.is_file()

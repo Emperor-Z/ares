@@ -94,6 +94,17 @@ Settings are read from `~/.ares/.env`, then the `.env` in this checkout. Real en
 
 `/serena` works on the directory you launch Ares from. Set `ARES_SERENA_PROJECT` to point it somewhere else.
 
+## Docker
+
+The five A2A agent servers can run in a container instead, with Ollama staying on the host:
+
+```bash
+docker compose -f docker/agents/docker-compose.yml up -d --build
+ARES_PROJECT=~/code/myapp docker compose -f docker/agents/docker-compose.yml up -d   # point /serena at a project
+```
+
+It uses host networking, because Ollama and Langfuse only listen on `127.0.0.1`, so this is Linux only. The container runs as your user (`ARES_UID`/`ARES_GID`, default 1000). It shares `~/.ares` with the REPL for traces and ratings, and reads the Langfuse keys from this checkout's `.env`. Serena and its Python language server are baked into the image, so `/serena` needs no network. `start.sh` notices the containerised servers and doesn't start a second set.
+
 ## Memory
 
 With the `memory` extra installed, Ares recalls related memories before each prompt and adds them to the context. After each reply it hands the exchange to a small local model (`qwen2.5-coder:3b` by default) in the background, which pulls out facts worth keeping: your projects, tools, hardware, preferences and deadlines. Everything stays in `~/.ares/memory`. mem0's telemetry is switched off.
@@ -108,6 +119,6 @@ Only routing is learned. Tool sets and turn limits stay as configured: a few rat
 
 ## Status
 
-Ares is in daily use for personal coding and work. It is still experimental and expects the local Ollama models above to be pulled. Next improvement: Dockerised agent services.
+Ares is in daily use for personal coding and work. It is still experimental and expects the local Ollama models above to be pulled.
 
 Tests live in `tests/` and run on every push (`uv pip install -e ".[dev]" && pytest`), covering A2A endpoints, config loading, agent handoff, conversation history, and the Serena tool wrappers.

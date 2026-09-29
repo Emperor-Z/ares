@@ -44,6 +44,12 @@ def get_trace_store() -> TraceStore:
     return _store
 
 
+def init_trace_store() -> None:
+    """Create the trace DB and its schema, then close it (safe before forking)."""
+    os.makedirs(os.path.dirname(TRACE_DB_PATH), exist_ok=True)
+    TraceStore(db_path=TRACE_DB_PATH).close()
+
+
 # ---------------------------------------------------------------------------
 # Langfuse exporter (bus subscriber on TRACE_COMPLETE)
 # ---------------------------------------------------------------------------
