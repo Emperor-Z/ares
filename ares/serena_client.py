@@ -95,18 +95,16 @@ class SerenaClient:
         self._recv_for_id(msg_id)
         self._send({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
 
-    def call_tool(self, name: str, arguments: dict[str, Any]) -> str:
-        """Call a Serena MCP tool and return its text output."""
+    def _request(self, method: str, params: dict[str, Any]) -> dict:
         with self._lock:
             msg_id = self._next_id
             self._next_id += 1
-            self._send({
-                "jsonrpc": "2.0",
-                "id": msg_id,
-                "method": "tools/call",
-                "params": {"name": name, "arguments": arguments},
-            })
-            resp = self._recv_for_id(msg_id)
+            self._send({"jsonrpc": "2.0", "id": msg_id, "method": method, "params": params})
+            return self._recv_for_id(msg_id)
+
+    def call_tool(self, name: str, arguments: dict[str, Any]) -> str:
+        """Call a Serena MCP tool and return its text output."""
+        resp = self._request("tools/call", {"name": name, "arguments": arguments})
 
         if "error" in resp:
             err = resp["error"]
@@ -114,6 +112,11 @@ class SerenaClient:
 
         contents = resp.get("result", {}).get("content", [])
         return "\n".join(c.get("text", "") for c in contents if c.get("type") == "text") or "(no output)"
+
+    def list_tools(self) -> dict[str, dict]:
+        """Serena's tools as {name: input JSON schema}."""
+        resp = self._request("tools/list", {})
+        return {t["name"]: t.get("inputSchema", {}) for t in resp.get("result", {}).get("tools", [])}
 
     def close(self) -> None:
         if self._proc:
