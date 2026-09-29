@@ -20,7 +20,7 @@ A real local session: `./start.sh` boots Ollama, Langfuse, and all five A2A agen
 - Exposes A2A health endpoints for individual agents
 - Tracks runs through a local/self-hosted Langfuse stack
 - Remembers facts about you and your projects across sessions, fully locally (mem0 + Ollama + on-disk Qdrant)
-- Includes a learning cycle hook for behaviour refinement experiments
+- Learns which agent to route to from your `/good` and `/bad` ratings
 
 ## Architecture
 
@@ -49,7 +49,8 @@ AresSystem
 /thinker <task>  deeper reasoning or planning
 /runner <task>   quick execution-oriented task
 /serena <task>   codebase-aware navigation and edits
-/learn           run the learning cycle
+/good, /bad      rate the last reply; Ares learns routing from it
+/learn           show what Ares has learned about routing
 /remember <fact> store a fact verbatim
 /memories        list what Ares remembers
 /forget          delete all memories (asks first)
@@ -98,6 +99,12 @@ Settings are read from `~/.ares/.env`, then the `.env` in this checkout. Real en
 With the `memory` extra installed, Ares recalls related memories before each prompt and adds them to the context. After each reply it hands the exchange to a small local model (`qwen2.5-coder:3b` by default) in the background, which pulls out facts worth keeping: your projects, tools, hardware, preferences and deadlines. Everything stays in `~/.ares/memory`. mem0's telemetry is switched off.
 
 Extraction takes a few seconds per reply on an RTX 3050 Ti and doesn't block the REPL. A 3B model misses vague statements, so use `/remember` for anything that matters. Set `ARES_MEMORY=0` to turn memory off.
+
+## Learning
+
+`/good` and `/bad` rate the last reply. Each rating goes to `~/.ares/feedback.jsonl` with your prompt and the agent that answered, and to the trace in `~/.ares/traces.db`. The orchestrator's system prompt then carries up to 8 well-rated and 8 badly rated routing examples, so similar requests go to the agent that worked. `/learn` lists them.
+
+Only routing is learned. Tool sets and turn limits stay as configured: a few ratings can't show why a run went well, and trimming either from a small sample makes agents worse. The A2A orchestrator picks up new ratings when it restarts.
 
 ## Status
 
