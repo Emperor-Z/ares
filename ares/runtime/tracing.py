@@ -167,7 +167,8 @@ class TraceCollector:
             state[("tool", e.data.get("call_key"))] = (e.timestamp, e.data.get("arguments", {}))
 
         def on_tool_end(e: Event) -> None:
-            start, arguments = state.pop(("tool", e.data.get("call_key")), (e.timestamp, {}))
+            start, arguments = state.pop(("tool", e.data.get("call_key")),
+                                         (e.timestamp, e.data.get("arguments", {})))
             steps.append(TraceStep(
                 step_type=StepType.TOOL_CALL, timestamp=start,
                 duration_seconds=e.data.get("latency", e.timestamp - start),

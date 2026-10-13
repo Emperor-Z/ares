@@ -187,25 +187,16 @@ class ToolExecutor:
         return [t.to_openai_function() for t in self._tools.values()]
 
     def execute(self, call: ToolCall) -> ToolResult:
-        tool = self._tools.get(call.name)
-        if tool is None:
-            known = ", ".join(self._tools) or "none"
-            return _fail(call.name, f"Unknown tool: {call.name}. Available tools: {known}.")
-        try:
-            params = loads_lenient(call.arguments) if call.arguments else {}
-        except json.JSONDecodeError as exc:
-            return _fail(call.name, f"Invalid arguments JSON: {exc}")
-        if not isinstance(params, dict):
-            return _fail(call.name, f"Invalid arguments: expected a JSON object, got {type(params).__name__}.")
-
+        prepared = self._prepare(call)
+        if isinstance(prepared, ToolResult):
+            # Rejected before running; still traced, so failed attempts show up.
+            self._publish(EventType.TOOL_CALL_END, {
+                "tool": call.name, "success": False, "latency": 0.0, "result": prepared.content,
+                "agent": self.agent_id, "call_key": None, "arguments": call.arguments,
+            })
+            return prepared
+        tool, params = prepared
         spec = tool.spec
-        if spec.requires_confirmation and not _auto_approve():
-            if _confirm is None:
-                return _fail(call.name, f"'{call.name}' needs the user's approval, and nobody is here to give it. "
-                                        "It runs from the Ares REPL, or on a server started with ARES_SHELL_AUTO=1.")
-            if not _confirm(f"{self.agent_id or 'agent'} wants to run: {tool.describe_call(params)}"):
-                return _fail(call.name, f"The user declined this {call.name} call. Don't retry it; "
-                                        "carry on without it or ask the user what to do instead.")
 
         call_key = uuid.uuid4().hex
         self._publish(EventType.TOOL_CALL_START, {"tool": call.name, "arguments": params,
@@ -233,6 +224,39 @@ class ToolExecutor:
             "call_key": call_key,
         })
         return result
+
+    def _prepare(self, call: ToolCall) -> tuple[BaseTool, dict[str, Any]] | ToolResult:
+        """The tool and its parsed arguments, or the failure to report instead."""
+        tool = self._tools.get(call.name)
+        if tool is None:
+            known = ", ".join(self._tools) or "none"
+            return _fail(call.name, f"Unknown tool: {call.name}. Available tools: {known}.")
+        try:
+            params = loads_lenient(call.arguments) if call.arguments else {}
+        except json.JSONDecodeError as exc:
+            return _fail(call.name, f"Invalid arguments JSON: {exc}")
+        spec = tool.spec
+        if not isinstance(params, dict):
+            # Action Input: "3847 * 2219" for a tool with one required parameter.
+            required = spec.parameters.get("required", [])
+            if len(required) == 1 and isinstance(params, (str, int, float)):
+                params = {required[0]: params}
+            else:
+                return _fail(call.name, f"Invalid arguments: expected a JSON object, got {type(params).__name__}.")
+        missing = [name for name in spec.parameters.get("required", []) if name not in params]
+        if missing:
+            example = json.dumps({name: "..." for name in spec.parameters.get("required", [])})
+            return _fail(call.name, f"Missing required argument(s): {', '.join(missing)}. "
+                                    f"Pass the arguments as a JSON object, e.g. {example}")
+
+        if spec.requires_confirmation and not _auto_approve():
+            if _confirm is None:
+                return _fail(call.name, f"'{call.name}' needs the user's approval, and nobody is here to give it. "
+                                        "It runs from the Ares REPL, or on a server started with ARES_SHELL_AUTO=1.")
+            if not _confirm(f"{self.agent_id or 'agent'} wants to run: {tool.describe_call(params)}"):
+                return _fail(call.name, f"The user declined this {call.name} call. Don't retry it; "
+                                        "carry on without it or ask the user what to do instead.")
+        return tool, params
 
     def _publish(self, event: EventType, data: dict[str, Any]) -> None:
         if self._bus is not None:
