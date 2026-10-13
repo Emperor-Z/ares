@@ -122,3 +122,14 @@ def test_schema_check_reports_renamed_params():
     problems = schema_mismatches(renamed)
     assert any(p.startswith("rename_symbol:") and "symbol" in p for p in problems)
     assert any(p.startswith("search_for_pattern:") for p in problems)
+
+
+@pytest.mark.parametrize("pattern,expected", [
+    ("AresSystem/build_agent", 'Try just "build_agent"'),
+    ("build_agent", "substring_matching"),
+])
+def test_find_symbol_empty_result_suggests_a_retry(pattern, expected):
+    with patch("ares.tools.serena_tools.get_serena_client", return_value=_make_fake_client("[]")):
+        from ares.tools.serena_tools import FindSymbolTool
+        result = FindSymbolTool().execute(name_path_pattern=pattern)
+    assert result.success and f'No symbol matches "{pattern}".' in result.content and expected in result.content

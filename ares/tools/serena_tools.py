@@ -90,7 +90,15 @@ class FindSymbolTool(_SerenaTool):
         )
 
     def execute(self, **params: Any) -> ToolResult:
-        return self._call("find_symbol", **params)
+        result = self._call("find_symbol", **params)
+        pattern = str(params.get("name_path_pattern", ""))
+        if result.success and result.content.strip() == "[]":
+            # Small models guess parents ("AresSystem/build_agent") and read [] as "doesn't exist".
+            short = pattern.rstrip("/").rsplit("/", 1)[-1]
+            hint = (f' Try just "{short}", which matches it in any class or module.' if short != pattern
+                    else " Try substring_matching: true, or a shorter part of the name.")
+            result.content = f'No symbol matches "{pattern}".{hint} Don\'t conclude it doesn\'t exist yet.'
+        return result
 
 
 class GetSymbolsOverviewTool(_SerenaTool):
