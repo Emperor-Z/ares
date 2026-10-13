@@ -8,7 +8,6 @@ from ares.agents import coder as _coder_mod
 from ares.agents import thinker as _thinker_mod
 from ares.agents import runner as _runner_mod
 from ares.agents import orchestrator as _orch_mod
-from ares.agents.orchestrator import ORCHESTRATOR_SYSTEM_PROMPT
 from ares.agents import serena_agent as _serena_mod
 from ares import learning, memory
 from ares.observability import get_trace_store, wire_observability, wrap_with_collector
@@ -57,9 +56,7 @@ class AresSystem:
         self.serena       = wrap_with_collector(_serena,  self.bus)
         self.orchestrator = wrap_with_collector(_orch,    self.bus)
 
-        self._router = _orch
         self._last: tuple[str, list[str], str | None] | None = None  # (prompt, agents, trace_id)
-        self.learn_now()
 
         logger.info("Ares ready.")
 
@@ -85,6 +82,10 @@ class AresSystem:
         full_prompt = _format_history(history or [], prompt)
         if self.use_memory:
             full_prompt = memory.with_memories(full_prompt, memory.recall(prompt))
+        if name == "orchestrator":
+            note = learning.routing_note(prompt, learning.load())
+            if note:
+                full_prompt = f"{full_prompt}\n\n{note}"
         content = agent.run(full_prompt).content or "(no output)"
         if self.use_memory:
             memory.remember_exchange(prompt, content)
@@ -94,7 +95,7 @@ class AresSystem:
         return content
 
     def rate(self, score: float) -> bool:
-        """Rate the last reply (1.0 good, 0.0 bad) and re-learn routing.
+        """Rate the last reply (1.0 good, 0.0 bad). The next similar prompt uses it.
 
         Returns False if there is no reply to rate.
         """
@@ -104,12 +105,7 @@ class AresSystem:
         learning.record(prompt, agents, score, trace_id)
         if trace_id:
             get_trace_store().update_feedback(trace_id, score)
-        self.learn_now()
         return True
-
-    def learn_now(self) -> dict:
-        """Rebuild the orchestrator's routing lessons from all ratings so far."""
-        return learning.apply(self._router, ORCHESTRATOR_SYSTEM_PROMPT)
 
     def routing_lessons(self) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
         return learning.routing_examples(learning.load())

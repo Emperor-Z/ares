@@ -146,16 +146,6 @@ def test_tool_calling_continues_cut_off_replies():
     assert ToolCallingAgent(engine, "m").run("long").content == "first half second half"
 
 
-def test_system_prompt_can_be_swapped_between_runs():
-    # learning.apply() rewrites the orchestrator's prompt in place.
-    engine = _Engine("a", "b")
-    agent = ToolCallingAgent(engine, "m", system_prompt="old")
-    agent.run("x")
-    agent._system_prompt = "new"
-    agent.run("y")
-    assert engine.calls[1][0][0].content == "new"
-
-
 def test_turn_and_inference_events():
     bus = EventBus()
     seen = []

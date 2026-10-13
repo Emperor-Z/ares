@@ -125,9 +125,9 @@ Extraction takes a few seconds per reply on an RTX 3050 Ti and doesn't block the
 
 ## Learning
 
-`/good` and `/bad` rate the last reply. Each rating goes to `~/.ares/feedback.jsonl` with your prompt and the agent that answered, and to the trace in `~/.ares/traces.db`. The orchestrator's system prompt then carries up to 8 well-rated and 8 badly rated routing examples, so similar requests go to the agent that worked. `/learn` lists them.
+`/good` and `/bad` rate the last reply. Each rating goes to `~/.ares/feedback.jsonl` with your prompt and the agent that answered, and to the trace in `~/.ares/traces.db`. When a new request is worded like rated ones, up to 4 of them are attached to it as a note saying which choice was right and which was wrong, so similar requests go to the agent that worked. `/learn` lists your ratings.
 
-Only routing is learned. Tool sets and turn limits stay as configured: a few ratings can't show why a run went well, and trimming either from a small sample makes agents worse. The A2A orchestrator picks up new ratings when it restarts.
+Only routing is learned. Tool sets and turn limits stay as configured: a few ratings can't show why a run went well, and trimming either from a small sample makes agents worse. Ratings are read on every request, so the REPL and the A2A orchestrator both use a new one straight away.
 
 ## Status
 

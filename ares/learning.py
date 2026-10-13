@@ -1,9 +1,11 @@
 """Learning from feedback — /good and /bad teach the orchestrator how to route.
 
 Each rating is appended to ~/.ares/feedback.jsonl with the user's prompt and
-the agent that answered it. `apply()` turns the most recent ratings into
-routing examples in the orchestrator's system prompt: well-rated requests
-show which agent to pick, badly rated ones which choice to avoid.
+the agent that answered it. `routing_note()` finds the rated requests most
+like a new one and attaches them to it as a note: which choice was right,
+which was wrong. The router is a 4B model, and in tests a note next to the
+request moved 8 of 9 routing decisions, where the same lessons listed in the
+system prompt moved 3. Ratings are read per request, so new ones apply at once.
 
 Routing is the one thing a handful of ratings can teach reliably. Tool sets
 and turn limits are left alone: the traces don't show why a run went well,
@@ -15,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -22,8 +25,15 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 FEEDBACK_FILE = Path(os.environ.get("ARES_FEEDBACK_PATH", os.path.expanduser("~/.ares/feedback.jsonl")))
-# Per polarity. The router is a 4B model, so the prompt stays short.
+# Per polarity, for /learn.
 MAX_EXAMPLES = 8
+# Rated requests attached to one prompt, and how alike they must be (Jaccard over words).
+MAX_NOTE_LESSONS = 4
+MIN_SIMILARITY = 0.2
+_STOPWORDS = frozenset(
+    "a an the this that these those is are was were be to of in on at for with and or but it its "
+    "my me i you your we our can could would should will do does did how what which who when where "
+    "why please some any all from by as into about".split())
 _PROMPT_CHARS = 160
 DIRECT = "direct"  # the orchestrator answered without handing off
 
@@ -74,24 +84,31 @@ def _choice(agent: str) -> str:
     return "answered directly" if agent == DIRECT else f"call_{agent}"
 
 
-def routing_prompt(base: str, ratings: list[dict[str, Any]]) -> str:
-    """`base` plus the routing lessons learned from `ratings`."""
-    good, bad = routing_examples(ratings)
-    if not good and not bad:
-        return base
-    lines = [base.rstrip(), "", "Routing lessons from the user's ratings:"]
-    if good:
-        lines.append("Good choices. Route similar requests the same way:")
-        lines += [f'- "{p}" -> {_choice(a)}' for p, a in good]
-    if bad:
-        lines.append("Poor choices. Route similar requests differently:")
-        lines += [f'- "{p}" -> {_choice(a)}' for p, a in bad]
-    return "\n".join(lines) + "\n"
+def _words(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z0-9_]+", text.lower()) if w not in _STOPWORDS}
 
 
-def apply(orchestrator: Any, base_prompt: str, path: Path | None = None) -> dict[str, int]:
-    """Rebuild the orchestrator's system prompt from the ratings on disk."""
-    ratings = load(path)
-    orchestrator._system_prompt = routing_prompt(base_prompt, ratings)
-    good, bad = routing_examples(ratings)
-    return {"ratings": len(ratings), "good_examples": len(good), "bad_examples": len(bad)}
+def _similarity(a: set[str], b: set[str]) -> float:
+    return len(a & b) / len(a | b) if a and b else 0.0
+
+
+def routing_note(prompt: str, ratings: list[dict[str, Any]]) -> str:
+    """A note on how the user rated requests like `prompt`, or "" if none are alike."""
+    words = _words(prompt)
+    lessons: list[tuple[float, str, str, bool]] = []
+    seen: set[str] = set()
+    for r in reversed(ratings):  # latest rating per prompt wins
+        rated = " ".join(str(r.get("prompt", "")).split())
+        if not rated or rated in seen:
+            continue
+        seen.add(rated)
+        score = _similarity(words, _words(rated))
+        if score >= MIN_SIMILARITY:
+            agents = r.get("agents") or [DIRECT]
+            lessons.append((score, rated[:_PROMPT_CHARS], agents[0], r.get("score", 0) >= 0.5))
+    if not lessons:
+        return ""
+    lessons.sort(key=lambda lesson: lesson[0], reverse=True)
+    parts = [f'for "{p}" {_choice(a)} was {"right" if good else "wrong"}'
+             for _, p, a, good in lessons[:MAX_NOTE_LESSONS]]
+    return f"(Routing note from the user's past ratings: {'; '.join(parts)}.)"

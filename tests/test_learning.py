@@ -38,26 +38,26 @@ def test_examples_are_capped_newest_first():
     assert good[0][0] == "task 19"
 
 
-def test_routing_prompt_lists_lessons():
-    base = "You are Ares."
-    assert learning.routing_prompt(base, []) == base
+def test_routing_note_picks_similar_ratings():
     ratings = [
-        {"prompt": "write fib", "agents": ["coder"], "score": 1.0},
-        {"prompt": "hi", "agents": [], "score": 0.0},
+        {"prompt": "Check how much RAM is free on this laptop.", "agents": ["runner"], "score": 0.0},
+        {"prompt": "Show how much free memory this computer has.", "agents": ["coder"], "score": 1.0},
+        {"prompt": "hi there", "agents": [], "score": 1.0},
     ]
-    out = learning.routing_prompt(base, ratings)
-    assert out.startswith(base)
-    assert '"write fib" -> call_coder' in out
-    assert '"hi" -> answered directly' in out
+    note = learning.routing_note("Check how much disk space is free on this machine.", ratings)
+    assert '"Check how much RAM is free on this laptop." call_runner was wrong' in note
+    assert "call_coder was right" in note and "hi there" not in note
+    assert learning.routing_note("Write a haiku about autumn.", ratings) == ""
+    assert learning.routing_note("hi there", ratings).endswith('"hi there" answered directly was right.)')
 
 
-def test_apply_sets_orchestrator_prompt(tmp_path):
-    path = tmp_path / "feedback.jsonl"
-    learning.record("write fib", ["coder"], 1.0, "t1", path=path)
-    orch = SimpleNamespace(_system_prompt="old")
-    summary = learning.apply(orch, "base", path=path)
-    assert "call_coder" in orch._system_prompt
-    assert summary == {"ratings": 1, "good_examples": 1, "bad_examples": 0}
+def test_routing_note_uses_latest_rating_and_caps_lessons():
+    ratings = [{"prompt": "fix the build", "agents": ["coder"], "score": 1.0},
+               {"prompt": "fix the build", "agents": ["coder"], "score": 0.0}]
+    ratings += [{"prompt": f"fix the build step {i}", "agents": ["runner"], "score": 1.0} for i in range(9)]
+    note = learning.routing_note("fix the build", ratings)
+    assert '"fix the build" call_coder was wrong' in note
+    assert note.count(" was ") == learning.MAX_NOTE_LESSONS
 
 
 def test_handoffs_come_from_call_tools_only():
@@ -80,7 +80,6 @@ def test_rate_records_the_last_reply(monkeypatch, tmp_path):
 
     system = AresSystem.__new__(AresSystem)
     system.use_memory = False
-    system._router = SimpleNamespace(_system_prompt="")
     system._last = None
     trace = SimpleNamespace(trace_id="t9", steps=[_step("call_thinker")])
     system.orchestrator = MagicMock(last_trace=trace)
@@ -92,4 +91,9 @@ def test_rate_records_the_last_reply(monkeypatch, tmp_path):
 
     store.update_feedback.assert_called_once_with("t9", 0.0)
     assert learning.load(path)[0]["agents"] == ["thinker"]
-    assert '"compare REST and gRPC" -> call_thinker' in system._router._system_prompt
+
+    # The rating applies to the next similar prompt, without a restart.
+    system.run("compare REST and GraphQL")
+    sent = system.orchestrator.run.call_args.args[0]
+    assert sent.startswith("compare REST and GraphQL")
+    assert '"compare REST and gRPC" call_thinker was wrong' in sent

@@ -11,7 +11,7 @@ Key files:
 - `ares/agents/`: one module per agent, all built through `_base.build_agent()`.
 - `ares/engine.py`: Ares's Ollama client, with streaming for the live view (`ares/live.py`, which also asks the user to approve shell commands).
 - `ares/tools/builtin.py`: shell (asks first), file read/write (refuse secrets) and calculator tools.
-- `ares/learning.py`: turns `/good` and `/bad` ratings into orchestrator routing examples.
+- `ares/learning.py`: attaches `/good` and `/bad` ratings of similar past requests to each orchestrator prompt as a routing note.
 - `ares/memory.py`: mem0 on Ollama with local Qdrant. All writes go through one worker thread.
 - `ares/observability.py`: traces to `~/.ares/traces.db`, plus optional Langfuse export.
 - `ares/a2a_server.py`: A2A servers on `127.0.0.1:8100-8104`. `python -m ares.a2a_server` runs them all.
