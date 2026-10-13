@@ -1,4 +1,4 @@
-"""Observability — TraceCollector wiring + Langfuse exporter.
+"""Observability — trace collection + Langfuse exporter.
 
 TraceCollector wraps each agent and records every run() to a shared
 SQLite TraceStore. A Langfuse exporter subscribes to TRACE_COMPLETE
@@ -16,9 +16,8 @@ from typing import Any
 
 import httpx
 
-from openjarvis.core.events import EventBus, EventType
-from openjarvis.traces.collector import TraceCollector
-from openjarvis.traces.store import TraceStore
+from ares.runtime.events import EventBus, EventType
+from ares.runtime.tracing import TraceCollector, TraceStore
 
 logger = logging.getLogger(__name__)
 

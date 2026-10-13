@@ -15,7 +15,8 @@ RUN uv tool install --no-cache serena-agent==1.3.0 --with "pyright[nodejs]" \
 
 WORKDIR /app
 # Dependencies first so source edits don't reinstall them.
-COPY pyproject.toml README.md LICENSE ./
+COPY pyproject.toml README.md LICENSE NOTICE ./
+COPY LICENSES ./LICENSES
 RUN uv pip install --system --no-cache -r pyproject.toml
 COPY ares ./ares
 RUN uv pip install --system --no-cache --no-deps .

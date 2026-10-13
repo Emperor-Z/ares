@@ -30,12 +30,13 @@ Terminal REPL
     v
 AresSystem
     |
-    +-- orchestrator agent
-    +-- coder agent
-    +-- thinker agent
-    +-- runner agent
+    +-- orchestrator agent   (native tool calling, hands off to the others)
+    +-- coder agent          (ReAct loop)
+    +-- thinker agent        (text Action loop, for deepseek-r1)
+    +-- runner agent         (ReAct loop)
     +-- Serena/code-navigation agent
     |
+    +-- Ares runtime (ares/runtime): agent loops, tools, loop guard, events, traces, A2A
     +-- Ollama local models
     +-- memory layer
     +-- Langfuse observability
@@ -94,6 +95,17 @@ Settings are read from `~/.ares/.env`, then the `.env` in this checkout. Real en
 
 `/serena` works on the directory you launch Ares from. Set `ARES_SERENA_PROJECT` to point it somewhere else.
 
+## Shell commands
+
+The coder, runner and thinker can run shell commands, but only with your approval. In the REPL each command is shown first:
+
+```text
+  runner wants to run: $ git status  (in /home/you/project)
+  Run it? [y/N]
+```
+
+Commands run with a minimal environment (`PATH`, `HOME`, `USER`, `LANG`, `TERM`), so keys in Ares's own environment stay out of reach. The A2A servers have nobody to ask, so they refuse shell commands unless started with `ARES_SHELL_AUTO=1`. File tools don't ask, but refuse secrets such as `.env`, private keys and credential files.
+
 ## Docker
 
 The five A2A agent servers can run in a container instead, with Ollama staying on the host:
@@ -121,4 +133,8 @@ Only routing is learned. Tool sets and turn limits stay as configured: a few rat
 
 Ares is in daily use for personal coding and work. It is still experimental and expects the local Ollama models above to be pulled.
 
-Tests live in `tests/` and run on every push (`uv pip install -e ".[dev]" && pytest`), covering A2A endpoints, config loading, agent handoff, conversation history, and the Serena tool wrappers.
+Tests live in `tests/` and run on every push (`uv pip install -e ".[dev]" && pytest`), covering the agent loops, tool execution and approvals, the loop guard, the Ollama client, tracing, A2A, memory, learning, and the Serena tool wrappers.
+
+## License
+
+MIT (see `LICENSE`). Some files are adapted from third-party code under the Apache License 2.0; `NOTICE` lists them and `LICENSES/` holds the license text.

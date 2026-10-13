@@ -1,4 +1,4 @@
-"""Orchestrator — routes input to coder/thinker/runner/serena via OrchestratorAgent.
+"""Orchestrator — routes input to coder/thinker/runner/serena.
 
 Uses flux (qwen3.5:4b) for fast routing with native tool calling.
 Wraps each sub-agent as a local tool for in-process handoff.
@@ -9,12 +9,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from openjarvis.agents.orchestrator import OrchestratorAgent
-from openjarvis.agents._stubs import AgentResult
-from openjarvis.core.events import EventBus
-from openjarvis.tools._stubs import BaseTool, ToolSpec, ToolResult
-
 from ares.agents._base import build_agent
+from ares.runtime.agents import ToolCallingAgent
+from ares.runtime.events import EventBus
+from ares.runtime.tools import BaseTool, ToolSpec
+from ares.runtime.types import AgentResult, ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +45,7 @@ class _AgentHandoffTool(BaseTool):
                 "required": ["task"],
             },
             category="agent_handoff",
+            timeout_seconds=None,  # sub-agents take minutes; never abandon one mid-task
         )
 
     def execute(self, **params: Any) -> ToolResult:
@@ -87,7 +87,7 @@ If the request is ambiguous, use call_thinker.
 """
 
 
-def build(bus: EventBus, coder, thinker, runner, serena) -> OrchestratorAgent:
+def build(bus: EventBus, coder, thinker, runner, serena) -> ToolCallingAgent:
     handoff_tools = [
         _AgentHandoffTool(
             "call_coder",
@@ -117,8 +117,9 @@ def build(bus: EventBus, coder, thinker, runner, serena) -> OrchestratorAgent:
     ]
 
     return build_agent(
-        OrchestratorAgent, bus, "orchestrator",
+        ToolCallingAgent, bus, "orchestrator",
         tools=handoff_tools,
-        mode="function_calling",
         system_prompt=ORCHESTRATOR_SYSTEM_PROMPT,
+        # Re-sending the same task gets the same answer from a minute-long run.
+        loop_guard={"max_identical_calls": 1},
     )

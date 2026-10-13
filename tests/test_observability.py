@@ -3,9 +3,8 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from openjarvis.core.types import Trace
-
 from ares import observability
+from ares.runtime.types import Trace
 
 
 def _trace(query: str) -> Trace:

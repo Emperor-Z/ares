@@ -1,23 +1,29 @@
 """Live REPL view: shows which agent is working and streams the answer.
 
-Sub-agents run on the runtime's tool thread pool, so anything happening on
+Sub-agents run on the runtime's tool threads, so anything happening on
 the REPL's own thread belongs to the agent the user addressed. Its tokens
 are the answer; everything else becomes a one-line status.
+
+The view also asks the user to approve shell commands. Agents ask from their
+own threads, so the answer is read by polling stdin, which lets a Ctrl-C on
+the REPL thread abandon the question instead of leaving it to swallow the
+next line typed at the prompt.
 """
 
 from __future__ import annotations
 
 import re
+import select
 import sys
 import threading
 import time
 from typing import Any, TextIO
 
-from openjarvis.core.events import EventBus, EventType
-
 from ares import engine
+from ares.runtime import tools
+from ares.runtime.events import EventBus, EventType
 
-# NativeReAct agents write Thought/Action lines before this marker.
+# ReAct agents write Thought/Action lines before this marker.
 _REACT_AGENTS = {"coder", "runner", "serena"}
 _FINAL = re.compile(r"final answer:\s*", re.IGNORECASE)
 _THINK = re.compile(r"<think>.*?(</think>|$)", re.DOTALL)
@@ -38,9 +44,11 @@ def visible_answer(agent: str, text: str) -> str:
 
 
 class LiveView:
-    def __init__(self, bus: EventBus, top_agent: str, out: TextIO = sys.stdout) -> None:
+    def __init__(self, bus: EventBus, top_agent: str, out: TextIO = sys.stdout, inp: TextIO = sys.stdin) -> None:
         self._bus = bus
         self._out = out
+        self._in = inp
+        self._closed = threading.Event()
         self._tty = out.isatty()
         self._main = threading.get_ident()
         self._lock = threading.Lock()
@@ -60,10 +68,13 @@ class LiveView:
         for event, handler in self._handlers:
             self._bus.subscribe(event, handler)
         engine.set_token_sink(self._on_token)
+        tools.set_confirm(self.confirm)
         self._set_status(f"{self._labels[self._main]} · starting")
         return self
 
     def __exit__(self, *exc: Any) -> None:
+        self._closed.set()  # before taking the lock: a pending confirm() holds it
+        tools.set_confirm(None)
         engine.set_token_sink(None)
         for event, handler in self._handlers:
             self._bus.unsubscribe(event, handler)
@@ -116,6 +127,24 @@ class LiveView:
                 self.answer = answer
         if not new:
             self._set_status(f"{self._label()} · thinking", tick=True)
+
+    # ── approvals ──────────────────────────────────────────────────────────
+
+    def confirm(self, prompt: str) -> bool:
+        """Ask the user to approve a tool call. False if the request is cancelled."""
+        with self._lock:
+            self._clear_status()
+            self._out.write(f"\n  {prompt}\n  Run it? [y/N] ")
+            self._out.flush()
+            try:
+                while not self._closed.is_set():
+                    ready, _, _ = select.select([self._in], [], [], 0.2)
+                    if ready:
+                        return self._in.readline().strip().lower() in ("y", "yes")
+                return False
+            finally:
+                self._out.write("\n")
+                self._out.flush()
 
     # ── status line ────────────────────────────────────────────────────────
 

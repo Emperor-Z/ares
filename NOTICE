@@ -1,0 +1,21 @@
+Ares
+Copyright (c) 2026 Arjun Ashad. Licensed under the MIT License (see LICENSE).
+
+This product includes software adapted from OpenJarvis
+(https://github.com/open-jarvis/OpenJarvis), Copyright 2025 The OpenJarvis
+Authors, licensed under the Apache License, Version 2.0. A copy of that
+license is in LICENSES/Apache-2.0.txt.
+
+The following files contain code adapted from OpenJarvis 1.0.4 and were
+modified for Ares (rewritten, trimmed to what Ares uses, and bug-fixed).
+Each carries a notice at the top saying so:
+
+  ares/engine.py
+  ares/runtime/a2a.py
+  ares/runtime/agents.py
+  ares/runtime/events.py
+  ares/runtime/loop_guard.py
+  ares/runtime/tools.py
+  ares/runtime/tracing.py
+  ares/runtime/types.py
+  ares/tools/builtin.py

@@ -2,9 +2,8 @@
 
 from unittest.mock import MagicMock
 
-from openjarvis.agents._stubs import AgentResult
-
 from ares.agents.orchestrator import _AgentHandoffTool
+from ares.runtime.types import AgentResult
 
 
 def test_handoff_success():
@@ -46,3 +45,8 @@ def test_tool_spec_shape():
     params = spec.parameters
     assert "task" in params["properties"]
     assert "task" in params["required"]
+
+
+def test_handoffs_never_time_out():
+    # Sub-agents routinely take longer than the default tool timeout.
+    assert _AgentHandoffTool("call_thinker", "Thinker", MagicMock()).spec.timeout_seconds is None

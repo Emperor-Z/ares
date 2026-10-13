@@ -25,10 +25,8 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from openjarvis.a2a.protocol import AgentCard
-from openjarvis.a2a.server import A2AServer
-
 from ares import __version__
+from ares.runtime.a2a import A2AServer, AgentCard
 
 logger = logging.getLogger(__name__)
 
@@ -92,10 +90,10 @@ PORTS = {
 # FastAPI app factory
 # ---------------------------------------------------------------------------
 
-def make_app(agent_name: str, handler_fn: Any, bus: Any = None) -> FastAPI:
+def make_app(agent_name: str, handler_fn: Any) -> FastAPI:
     """Create a FastAPI app exposing the A2A endpoints for one agent."""
     card = CARDS[agent_name]
-    server = A2AServer(agent_card=card, handler=handler_fn, bus=bus)
+    server = A2AServer(card, handler=handler_fn)
     app = FastAPI(title=card.name, docs_url=None, redoc_url=None)
 
     @app.get("/.well-known/agent.json")
@@ -130,9 +128,7 @@ def _run_agent_server(agent_name: str, port: int) -> None:
     logging.basicConfig(level=logging.WARNING)
 
     from ares.system import build_single_agent
-    handler_fn, bus = build_single_agent(agent_name)
-
-    app = make_app(agent_name, handler_fn, bus=bus)
+    app = make_app(agent_name, build_single_agent(agent_name))
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
 
 
