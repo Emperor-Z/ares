@@ -9,17 +9,16 @@ is Serena's semantic tools rather than raw shell/file ops.
 
 from __future__ import annotations
 
-from openjarvis.agents.native_react import NativeReActAgent
-from openjarvis.core.events import EventBus
-from openjarvis.tools.file_read import FileReadTool
-
 from ares.agents._base import build_agent
+from ares.runtime.agents import ReActAgent
+from ares.runtime.events import EventBus
+from ares.tools.builtin import FileReadTool
 from ares.tools.serena_tools import all_serena_tools
 
 
-def build(bus: EventBus) -> NativeReActAgent:
+def build(bus: EventBus) -> ReActAgent:
     return build_agent(
-        NativeReActAgent, bus, "serena",
+        ReActAgent, bus, "serena",
         config="coder",  # forge model, same quality tier as coder
         tools=[*all_serena_tools(), FileReadTool()],
     )

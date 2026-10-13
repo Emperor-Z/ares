@@ -9,9 +9,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from openjarvis.tools._stubs import BaseTool, ToolSpec
-from openjarvis.core.types import ToolResult
-
+from ares.runtime.tools import BaseTool, ToolSpec
+from ares.runtime.types import ToolResult
 from ares.serena_client import get_serena_client
 
 logger = logging.getLogger(__name__)
@@ -26,7 +25,6 @@ _checked = False
 
 class _SerenaTool(BaseTool):
     tool_id: str
-    is_local: bool = True
 
     def _call(self, mcp_name: str, **kwargs: Any) -> ToolResult:
         try:

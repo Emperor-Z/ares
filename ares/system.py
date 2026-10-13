@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import logging
 
-from openjarvis.core.events import EventBus
-
 from ares.agents import coder as _coder_mod
 from ares.agents import thinker as _thinker_mod
 from ares.agents import runner as _runner_mod
@@ -14,6 +12,7 @@ from ares.agents.orchestrator import ORCHESTRATOR_SYSTEM_PROMPT
 from ares.agents import serena_agent as _serena_mod
 from ares import learning, memory
 from ares.observability import get_trace_store, wire_observability, wrap_with_collector
+from ares.runtime.events import EventBus
 
 logger = logging.getLogger(__name__)
 
@@ -156,25 +155,20 @@ _AGENT_BUILDERS = {
 def build_single_agent(name: str):
     """Build one agent with minimal infrastructure (not the full system).
 
-    Returns (callable, bus) where callable accepts a prompt string and returns
-    a response string. The orchestrator is excluded — it requires all sub-agents
-    and should use AresSystem instead.
+    Returns a callable that takes a prompt and returns the response text.
+    The orchestrator needs every sub-agent, so it gets a full AresSystem.
     """
-    if name not in _AGENT_BUILDERS and name != "orchestrator":
+    if name == "orchestrator":
+        return AresSystem(use_memory=False).run
+    if name not in _AGENT_BUILDERS:
         raise ValueError(f"Unknown agent: {name!r}")
 
     bus = EventBus()
     wire_observability(bus)
-
-    if name == "orchestrator":
-        # Orchestrator needs all sub-agents; build the full system.
-        system = AresSystem(use_memory=False)
-        return system.run, system.bus
-
     agent = wrap_with_collector(_AGENT_BUILDERS[name](bus), bus)
 
     def _run(prompt: str) -> str:
         result = agent.run(prompt)
         return result.content or "(no output)"
 
-    return _run, bus
+    return _run
