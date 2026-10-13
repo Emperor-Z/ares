@@ -285,15 +285,27 @@ class ActionAgent(BaseAgent):
         tool_results: list[ToolResult] = []
         usage: dict[str, int] = {}
         content = ""
+        nudged = False
+        tool_names = {t.spec.name for t in self._tools}
 
         for turn in range(1, self._max_turns + 1):
             messages = self._fit(self._loop_guard.compress_context(messages))
             content = strip_think(self._generate(messages, usage).get("content") or "")
-            call = parse_action(content)
-            if call is None:
-                return self._result(_strip_actions(content), tool_results, turn, usage)
-            messages.append(Message(role=Role.ASSISTANT, content=content))
-            result = self._run_tool(ToolCall(id=f"action_{turn}", name=call[0], arguments=call[1]))
+            parsed = _parse_action_span(content)
+            if parsed is None:
+                # deepseek-r1 sometimes puts a tool call in a code block. Never run
+                # code-block text (an example could be a shell command); ask once instead.
+                fenced = None if nudged else fenced_tool_name(content, tool_names)
+                if fenced is None:
+                    return self._result(_strip_actions(content), tool_results, turn, usage)
+                nudged = True
+                messages.append(Message(role=Role.ASSISTANT, content=content))
+                messages.append(Message(role=Role.USER, content=_FENCED_CALL_NUDGE.format(tool=fenced)))
+                continue
+            name, arguments, end = parsed
+            # Drop anything after the call: models often go on to invent its result.
+            messages.append(Message(role=Role.ASSISTANT, content=content[:end].rstrip()))
+            result = self._run_tool(ToolCall(id=f"action_{turn}", name=name, arguments=arguments))
             tool_results.append(result)
             messages.append(Message(role=Role.USER, content=f"Result: {_clip(result.content)}"))
 
@@ -319,11 +331,63 @@ class ActionAgent(BaseAgent):
 
 def parse_action(text: str) -> tuple[str, str] | None:
     """(tool, JSON arguments) from an "Action:" block, or None if it's an answer."""
+    parsed = _parse_action_span(text)
+    return parsed[:2] if parsed else None
+
+
+def _parse_action_span(text: str) -> tuple[str, str, int] | None:
+    """parse_action, plus where the action ends in `text`."""
     action = re.search(r"^\s*Action:\s*(.+)$", text, re.IGNORECASE | re.MULTILINE)
     if not action:
         return None
-    action_input = re.search(r"Action Input:\s*(.+?)(?=\n\n|\Z)", text, re.DOTALL | re.IGNORECASE)
-    return action.group(1).strip(), action_input.group(1).strip() if action_input else "{}"
+    name = action.group(1).strip().strip("`*").strip()
+    action_input = re.search(r"Action Input:\s*", text[action.end():], re.IGNORECASE)
+    if not action_input:
+        return name, "{}", action.end()
+    start = action.end() + action_input.end()
+    rest = text[start:]
+    # The first whole JSON value, which may span lines and sit in a code block.
+    if rest[:1] in ('{', '[', '"'):
+        try:
+            value, length = json.JSONDecoder().raw_decode(rest)
+            return name, json.dumps(value, ensure_ascii=False), start + length
+        except ValueError:
+            pass  # the executor reports it, or reads stray backslashes leniently
+    block = re.match(r"(.+?)(?=\n\n|\n```|\Z)", rest, re.DOTALL)
+    raw = block.group(1).strip() if block else ""
+    return name, raw or "{}", start + (block.end() if block else 0)
+
+
+_FENCE = re.compile(r"```[\w-]*[ \t]*\r?\n(.*?)```", re.DOTALL)
+
+_FENCED_CALL_NUDGE = (
+    "Your reply put a {tool} call in a code block, so it was not run. To use the tool, reply with "
+    "only these lines:\n\nAction: {tool}\nAction Input: <json_arguments>\n\n"
+    "If you don't need it, give your final answer without the code block."
+)
+
+
+def fenced_tool_name(text: str, tool_names: set[str]) -> str | None:
+    """The tool a code block in `text` tries to call, if any.
+
+    Matches a block that starts with a tool name (calculator "2+2") or is a JSON
+    object naming one ({"name": "calculator", ...}).
+    """
+    for match in _FENCE.finditer(text):
+        body = match.group(1).strip()
+        try:
+            payload = json.loads(body)
+        except ValueError:
+            payload = None
+        if isinstance(payload, dict):
+            for key in ("name", "tool", "action"):
+                if payload.get(key) in tool_names:
+                    return payload[key]
+            continue
+        first = re.match(r"[\w.-]+", body)
+        if first and first.group() in tool_names:
+            return first.group()
+    return None
 
 
 def _strip_actions(text: str) -> str:

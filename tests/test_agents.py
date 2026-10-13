@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from ares.runtime.agents import ActionAgent, ReActAgent, ToolCallingAgent, parse_action, parse_react, strip_think
+from ares.runtime.agents import ActionAgent, ReActAgent, ToolCallingAgent, fenced_tool_name, parse_action, parse_react, strip_think
 from ares.runtime.events import EventBus, EventType
 from ares.runtime.loop_guard import LoopGuardConfig
 from ares.runtime.tools import BaseTool, ToolSpec
@@ -176,3 +176,45 @@ def test_engine_errors_propagate():
 
 def test_strip_think_handles_missing_open_tag():
     assert strip_think("reasoning</think>\nanswer") == "answer"
+
+
+def test_action_agent_nudges_a_fenced_tool_call_once():
+    # deepseek-r1 put calls like this in a code block, where they were never run.
+    fenced = 'So it is 2.\n\n```json\nadd {"a": 1, "b": 1}\n```'
+    engine = _Engine(fenced, 'Action: add\nAction Input: {"a": 1, "b": 1}', "Final Answer: 2")
+    tool = _Add()
+    result = ActionAgent(engine, "m", tools=[tool]).run("q")
+    assert len(tool.calls) == 1 and result.content.endswith("2")
+    nudge = engine.calls[1][0][-1].content
+    assert "was not run" in nudge and "Action: add" in nudge
+
+
+def test_action_agent_nudges_only_once_and_never_runs_code_blocks():
+    fenced = '```json\n{"name": "add", "arguments": {"a": 1}}\n```'
+    engine = _Engine(fenced, fenced)
+    tool = _Add()
+    result = ActionAgent(engine, "m", tools=[tool]).run("q")
+    assert tool.calls == [] and len(engine.calls) == 2 and "add" in result.content
+
+
+def test_fenced_tool_name_ignores_ordinary_code():
+    names = {"add", "shell_exec"}
+    assert fenced_tool_name("```python\nprint(1)\n```", names) is None
+    assert fenced_tool_name("```bash\nadditional steps\n```", names) is None
+    assert fenced_tool_name('```\n{"tool": "shell_exec"}\n```', names) == "shell_exec"
+
+
+def test_parse_action_takes_the_first_json_value():
+    # Multi-line input inside a code block, followed by an invented result.
+    reply = 'I will read it.\n\n```json\nAction: add\nAction Input:\n{\n  "a": 1,\n  "b": 2\n}\n```\n\nIt shows 9.'
+    assert parse_action(reply) == ("add", '{"a": 1, "b": 2}')
+    assert parse_action('Action: **add**  \nAction Input: "1+2"  \n\nThe result is') == ("add", '"1+2"')
+    assert parse_action("Action: add\nAction Input: a=1\n\nmore") == ("add", "a=1")
+
+
+def test_action_agent_drops_text_after_the_call():
+    reply = 'Action: add\nAction Input: {"a": 1, "b": 1}\n\nThe result is 7.'
+    engine = _Engine(reply, "It is 2.")
+    ActionAgent(engine, "m", tools=[_Add()]).run("q")
+    sent = [m.content for m in engine.calls[1][0] if m.role.value == "assistant"]
+    assert sent == ['Action: add\nAction Input: {"a": 1, "b": 1}']

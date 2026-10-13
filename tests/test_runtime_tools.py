@@ -120,3 +120,24 @@ def test_loads_lenient_reads_stray_backslashes_literally():
     assert loads_lenient(r'{"c": "a\\b \.c \n"}') == {"c": "a\\b \\.c \n"}
     with pytest.raises(json.JSONDecodeError):
         loads_lenient('{"c": ')
+
+
+def test_bare_value_fills_the_one_required_parameter():
+    # deepseek-r1 writes Action Input: "3847 * 2219" for single-argument tools.
+    result = ToolExecutor([_Echo()]).execute(_call('"hi"'))
+    assert result.success and result.content == "hi"
+
+
+def test_rejected_calls_are_still_published():
+    bus = EventBus()
+    ends = []
+    bus.subscribe(EventType.TOOL_CALL_END, lambda e: ends.append(e.data))
+    ToolExecutor([_Echo()], bus=bus, agent_id="thinker").execute(_call("[1, 2]"))
+    assert len(ends) == 1 and not ends[0]["success"] and ends[0]["agent"] == "thinker"
+
+
+def test_missing_required_argument_says_how_to_call():
+    tool = _Echo()
+    result = ToolExecutor([tool]).execute(_call("{}"))
+    assert not result.success and tool.ran_on is None
+    assert 'Missing required argument(s): text' in result.content and '{"text": "..."}' in result.content
